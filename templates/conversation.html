@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversación</title>
+    <link rel="stylesheet" href="/static/login.css">
+    <style>
+        body {
+            background: linear-gradient(120deg, #89f7fe 0%, #66a6ff 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            backdrop-filter: blur(6px);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.18);
+            background: rgba(255,255,255,0.95);
+            padding: 2rem 1.2rem 1.2rem 1.2rem;
+            max-width: 430px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            min-height: 600px;
+        }
+        .participants {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1.2rem;
+            justify-content: center;
+        }
+        .participant {
+            background: #dff9fb;
+            color: #273c75;
+            border-radius: 12px;
+            padding: 0.3rem 0.9rem;
+            font-size: 0.98rem;
+            font-weight: 500;
+            margin-bottom: 0.2rem;
+        }
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 1.2rem;
+            background: #f1f2f6;
+            border-radius: 10px;
+            padding: 1rem 0.7rem;
+            box-shadow: 0 2px 8px rgba(39,60,117,0.07);
+        }
+        .message {
+            margin-bottom: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 100%;
+        }
+        .message.me {
+            align-items: flex-end;
+        }
+        .message-user {
+            font-size: 0.9rem;
+            color: #2d3436;
+            font-weight: 500;
+            margin-bottom: 0.2rem;
+            padding: 0 0.5rem;
+        }
+        
+        .message.me .message-user {
+            text-align: right;
+            color: #273c75;
+        }
+        .message-content {
+            background: #66a6ff;
+            color: #fff;
+            border-radius: 16px 16px 16px 4px;
+            padding: 0.5rem 1rem;
+            font-size: 1.05rem;
+            max-width: 80%;
+            word-break: break-word;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            position: relative;
+            margin-left: 0.5rem;
+        }
+        .message.me .message-content {
+            background: #273c75;
+            border-radius: 16px 16px 4px 16px;
+            margin-right: 0.5rem;
+            margin-left: 0;
+        }
+        .message-time {
+            font-size: 0.75rem;
+            color: #aaa;
+            margin-top: 0.1rem;
+            padding: 0 0.5rem;
+        }
+        
+        .message.me .message-time {
+            text-align: right;
+        }
+        .send-form {
+            display: flex;
+            gap: 0.3rem;
+            margin-top: 0.5rem;
+        }
+        .send-input {
+            flex: 1 1 0%;
+            padding: 0.6rem 1rem;
+            border-radius: 5px;
+            border: 1px solid #dcdde1;
+            font-size: 1.08rem;
+            background: #f1f2f6;
+            min-width: 0;
+        }
+        .send-btn {
+            background: #273c75;
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            padding: 0.38rem 0.48rem;
+            font-size: 1.35rem;
+            width: 2.3rem;
+            height: 2.3rem;
+            min-width: 2.3rem;
+            min-height: 2.3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .send-btn:hover {
+            background: #40739e;
+        }
+        .back-btn {
+            background: #b2bec3;
+            color: #273c75;
+            border: none;
+            border-radius: 5px;
+            padding: 0.3rem 0.8rem;
+            font-size: 0.92rem;
+            cursor: pointer;
+            margin-bottom: 1rem;
+        }
+        .error {
+            color: #e84118;
+            margin-bottom: 0.7rem;
+        }
+        
+        /* Estilos adicionales para los mensajes */
+        .messages {
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Burbujas de chat más atractivas */
+        .message-content {
+            transition: all 0.2s;
+        }
+        
+        /* Colores específicos para diferentes participantes */
+        .message:not(.me) .message-content {
+            background: linear-gradient(135deg, #66a6ff 0%, #7290d9 100%);
+        }
+        
+        .message.me .message-content {
+            background: linear-gradient(135deg, #273c75 0%, #384f98 100%);
+        }
+        
+        /* Agrupamiento visual de mensajes */
+        .message-user {
+            font-weight: 500;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <button class="back-btn" onclick="goBack()">&larr; Volver</button>
+        <div class="participants" id="participants"></div>
+        <div class="messages" id="messages"></div>
+        <div id="errorMsg" class="error"></div>
+        <form class="send-form" id="sendForm">
+            <input type="text" id="messageInput" class="send-input" placeholder="Escribe un mensaje..." required autocomplete="off">
+            <button type="submit" class="send-btn" title="Enviar mensaje">💬</button>
+        </form>
+    </div>
+    <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const conversationId = urlParams.get('id');
+    const token = localStorage.getItem('access_token');
+    let currentUserId = null;
+    let participantsMap = {};
+    let participants = [];
+
+    function goBack() {
+        window.location.href = '/static/home.html';
+    }
+
+    async function fetchParticipants() {
+        try {
+            const res = await fetch(`http://localhost:8080/api/v1/participants/conversation/${conversationId}`, {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) {
+                if (res.status === 401) goBack();
+                return;
+            }
+            participants = await res.json(); // <-- Guarda la lista globalmente
+            const container = document.getElementById('participants');
+            container.innerHTML = '';
+            participantsMap = {};
+            participants.forEach(p => {
+                const span = document.createElement('span');
+                span.className = 'participant';
+                span.textContent = p.user.username;
+                container.appendChild(span);
+                participantsMap[p.user.id] = p.user.username;
+            });
+        } catch (e) {}
+    }
+
+    async function fetchMessages() {
+        try {
+            const res = await fetch(`http://localhost:8080/api/v1/messages/conversation/${conversationId}`, {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) {
+                if (res.status === 401) goBack();
+                return;
+            }
+            const messages = await res.json();
+            renderMessages(messages);
+        } catch (e) {}
+    }
+
+    function renderMessages(messages) {
+        const container = document.getElementById('messages');
+        container.innerHTML = '';
+        if (!messages.length) {
+            container.innerHTML = '<div style="color:#888;text-align:center;">No hay mensajes aún.</div>';
+            return;
+        }
+        
+        // Agrupar mensajes por remitente (para mensajes consecutivos)
+        let lastSenderId = null;
+        
+        messages.forEach(msg => {
+            const div = document.createElement('div');
+            div.className = 'message';
+            
+            // Determinar si el mensaje es propio
+            const isMine = msg.sender_id && currentUserId && msg.sender_id === currentUserId;
+            if (isMine) {
+                div.classList.add('me');
+            }
+            
+            const user = participantsMap[msg.sender_id] || 'Usuario';
+            const isNewSender = lastSenderId !== msg.sender_id;
+            lastSenderId = msg.sender_id;
+            
+            // Crear el contenido HTML del mensaje
+            let messageHtml = '';
+            
+            // Solo mostrar el nombre de usuario cuando cambia el remitente
+            if (isNewSender) {
+                messageHtml += `<span class="message-user">${user}</span>`;
+            }
+            
+            messageHtml += `<span class="message-content">${msg.content || '[Sin texto]'}`;
+                
+            // Solo agregar el botón de traducción si el mensaje NO es propio
+            if (!isMine) {
+                // Mejorar detección de idioma
+                // Si tiene más caracteres no-ASCII que ASCII, probablemente es español
+                // sino, probablemente es inglés
+                const content = msg.content || '';
+                const nonAsciiCount = (content.match(/[^\x00-\x7F]/g) || []).length;
+                const asciiCount = content.length - nonAsciiCount;
+                
+                // Caracteres especiales comunes en español: á, é, í, ó, ú, ñ, ¿, ¡
+                const spanishChars = (content.match(/[áéíóúüñ¿¡]/gi) || []).length;
+                
+                // Detectar idioma basado en caracteres
+                let detectedLang = 'en'; // Default to English
+                
+                if (spanishChars > 0 || nonAsciiCount > asciiCount/3) {
+                    detectedLang = 'es';
+                }
+                
+                messageHtml += `<button class="translate-btn" style="background:none;border:none;color:#888;font-size:1.1em;cursor:pointer;padding:0 0.3em;vertical-align:middle;opacity:0.7;" title="Traducir" onclick="toggleTranslate(this, '${encodeURIComponent(msg.content || '')}', '${detectedLang}', ${msg.sender_id})">🌐</button>`;
+            }
+            
+            messageHtml += `</span>
+                <span class="message-time">${msg.created_at ? new Date(msg.created_at).toLocaleString() : ''}</span>
+            `;
+            
+            div.innerHTML = messageHtml;
+            container.appendChild(div);
+        });
+        container.scrollTop = container.scrollHeight;
+    }
+
+    async function toggleTranslate(btn, content, sourceLang, senderId) {
+        const contentSpan = btn.parentElement;
+        // Si ya está traducido, volver al original
+        if (btn.dataset.translated === 'true') {
+            contentSpan.childNodes[0].textContent = btn.dataset.original;
+            btn.textContent = '🌐';
+            btn.dataset.translated = 'false';
+            return;
+        }
+        
+        // Obtener idiomas para traducción
+        // Siempre usar el lenguaje detectado para el mensaje original
+        let myLang = 'es'; // Default language for current user
+        let senderLang = sourceLang; // Use detected language from the message content
+        
+        // Try to get user's preferred language from participants
+        for (const p of participants) {
+            if (p.user && p.user.id === currentUserId && p.user.primary_language) {
+                myLang = p.user.primary_language;
+                break;
+            }
+        }
+        
+        // Forzar que sea diferente para siempre traducir inglés a español o viceversa
+        if (senderLang === 'en') {
+            myLang = 'es';
+        } else if (senderLang === 'es') {
+            myLang = 'en';
+        }
+        
+        // Para depuración, muestra los idiomas detectados
+        console.log(`Traduciendo de ${senderLang} a ${myLang}`);
+        btn.disabled = true;
+        btn.textContent = '...';
+        try {
+            // Guardar el texto original antes de traducir
+            const originalText = contentSpan.childNodes[0].textContent;
+            
+            // Llamar a la API de traducción
+            const res = await fetch('http://127.0.0.1:8000/translate/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: decodeURIComponent(content),
+                    source_lang: senderLang,
+                    target_lang: myLang
+                })
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                
+                // Solo mostrar la traducción si realmente hay un cambio
+                if (data.translated_text && data.translated_text !== originalText) {
+                    btn.dataset.original = originalText;
+                    btn.dataset.translated = 'true';
+                    contentSpan.childNodes[0].textContent = data.translated_text;
+                    btn.textContent = '↩️';
+                } else {
+                    // Si el texto traducido es idéntico, intentar intercambiar los idiomas
+                    const secondRes = await fetch('http://127.0.0.1:8000/translate/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text: decodeURIComponent(content),
+                            source_lang: myLang, // Invertimos source y target
+                            target_lang: senderLang
+                        })
+                    });
+                    
+                    if (secondRes.ok) {
+                        const secondData = await secondRes.json();
+                        if (secondData.translated_text && secondData.translated_text !== originalText) {
+                            btn.dataset.original = originalText;
+                            btn.dataset.translated = 'true';
+                            contentSpan.childNodes[0].textContent = secondData.translated_text;
+                            btn.textContent = '↩️';
+                        } else {
+                            btn.textContent = '🌐';
+                            alert('No se pudo traducir el mensaje (contenido similar)');
+                        }
+                    } else {
+                        btn.textContent = '🌐';
+                        alert('Error al traducir con idiomas invertidos');
+                    }
+                }
+            } else {
+                btn.textContent = '🌐';
+                alert('Error al traducir');
+            }
+        } catch (e) {
+            console.error("Error de traducción:", e);
+            btn.textContent = '🌐';
+            alert('Error de red al traducir');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function getCurrentUserId() {
+        // Decodifica el JWT para obtener el user_id
+        if (!token) return null;
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            return payload.user_id || payload.id || null;
+        } catch (e) { return null; }
+    }
+
+    document.getElementById('sendForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const input = document.getElementById('messageInput');
+        const content = input.value.trim();
+        if (!content) return;
+        const formData = new FormData();
+        formData.append('conversation_id', conversationId);
+        formData.append('content_type', 'text');
+        formData.append('content', content);
+        try {
+            const res = await fetch('http://localhost:8080/api/v1/messages/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                    // No pongas Content-Type, fetch lo maneja con FormData
+                },
+                body: formData
+            });
+            if (res.ok) {
+                input.value = '';
+                fetchMessages();
+            } else if (res.status === 401) {
+                goBack();
+            } else {
+                const err = await res.json();
+                document.getElementById('errorMsg').textContent = err.detail || 'No se pudo enviar el mensaje';
+            }
+        } catch (e) {
+            document.getElementById('errorMsg').textContent = 'No se pudo conectar al servidor.';
+        }
+    });
+
+    // Inicialización
+    (async function() {
+        if (!token) goBack();
+        currentUserId = await getCurrentUserId();
+        await fetchParticipants();
+        await fetchMessages();
+        // Refrescar mensajes cada 5 segundos
+        setInterval(fetchMessages, 5000);
+    })();
+    </script>
+</body>
+</html>
