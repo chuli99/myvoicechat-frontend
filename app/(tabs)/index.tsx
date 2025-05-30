@@ -1,9 +1,7 @@
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -20,7 +18,6 @@ export default function HomeScreen() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   useEffect(() => {
     const fetchConversations = async () => {
       if (!authState.token) return;
@@ -28,8 +25,28 @@ export default function HomeScreen() {
       setError(null);
       try {
         const api = createAuthenticatedAPI(authState.token);
-        const res = await api.get('/conversations');
-        setConversations(res.data);
+        const res = await api.get('http://localhost:8080/api/v1/conversations');
+        
+        // Para cada conversación, obtener también los participantes
+        const conversationsWithParticipants = await Promise.all(
+          res.data.map(async (conv: any) => {
+            try {
+              const participantsRes = await api.get(`http://localhost:8080/api/v1/participants/conversation/${conv.id}`);
+              return {
+                ...conv,
+                participants: participantsRes.data
+              };
+            } catch (error) {
+              console.error(`Error loading participants for conversation ${conv.id}:`, error);
+              return {
+                ...conv,
+                participants: []
+              };
+            }
+          })
+        );
+        
+        setConversations(conversationsWithParticipants);
       } catch (e: any) {
         if (e.response?.status === 401) {
           logout();
@@ -58,67 +75,131 @@ export default function HomeScreen() {
     }
   };
 
+  // Función para generar el nombre de la conversación
+  const getConversationName = (conversation: any) => {
+    if (!conversation.participants || conversation.participants.length === 0) {
+      return `Conversación #${conversation.id}`;
+    }
+    
+    // Filtrar participantes que no sean el usuario actual
+    const otherParticipants = conversation.participants.filter(
+      (p: any) => p.user.id !== authState.userId
+    );
+    
+    if (otherParticipants.length === 0) {
+      return `Conversación #${conversation.id} (Solo yo)`;
+    }
+    
+    // Crear nombres con idioma si está disponible
+    const participantNames = otherParticipants.map((p: any) => {
+      const name = p.user.username;
+      const lang = p.user.primary_language;
+      return lang ? `${name} (${lang})` : name;
+    });
+    
+    return participantNames.join(', ');
+  };  const handleLogout = async () => {
+    try {
+      console.log('🔐 Iniciando proceso de cierre de sesión...');
+      
+      // 1. Limpiar datos de sesión (patrón estándar web)
+      await logout();
+      
+      // 2. Forzar navegación al login (como Facebook, WhatsApp, etc.)
+      console.log('📱 Redirigiendo al login...');
+      router.replace('/login');
+      
+      // 3. Confirmación de éxito (patrón estándar web)
+      console.log('✅ Sesión cerrada exitosamente');
+      
+    } catch (error) {
+      console.error('❌ Error al cerrar sesión:', error);
+      // En caso de error, forzar navegación de todas formas (fallback seguro)
+      router.replace('/login');
+    }
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Mis Conversaciones</ThemedText>
-        <TouchableOpacity style={[styles.logoutButton, { backgroundColor: '#e84118', marginLeft: 12 }]} onPress={logout}>
+    <ThemedView style={styles.container}>
+      {/* Header MyVoice Chat */}
+      <ThemedView style={styles.header}>
+        <ThemedText style={styles.headerTitle}>MyVoice Chat</ThemedText>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <ThemedText style={styles.logoutButtonText}>Cerrar sesión</ThemedText>
         </TouchableOpacity>
       </ThemedView>
-      {error && <Text style={{ color: '#e84118', marginBottom: 10 }}>{error}</Text>}
-      {loading ? (
-        <ActivityIndicator size="large" color={tintColor} style={{ marginVertical: 30 }} />
-      ) : (
-        <FlatList
-          data={conversations}
-          keyExtractor={item => item.id.toString()}
-          ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#888', marginTop: 30 }}>No tienes conversaciones aún.</Text>}
-          renderItem={({ item }) => (
-            <View style={convStyles.item}>
-              <Text style={convStyles.title}>Conversación #{item.id}</Text>
-              <TouchableOpacity style={convStyles.enterBtn} onPress={() => handleEnterConversation(item.id)}>
-                <Text style={{ color: '#fff' }}>Entrar</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          style={{ marginTop: 20 }}
-        />
-      )}
-    </ParallaxScrollView>
+      
+      {/* Content */}
+      <ThemedView style={styles.content}>
+        <ThemedView style={styles.titleContainer}>
+          <ThemedText type="title">Mis Conversaciones</ThemedText>
+        </ThemedView>
+        {error && <Text style={{ color: '#e84118', marginBottom: 10 }}>{error}</Text>}
+        {loading ? (
+          <ActivityIndicator size="large" color={tintColor} style={{ marginVertical: 30 }} />
+        ) : (        <FlatList
+            data={conversations}
+            keyExtractor={item => item.id.toString()}
+            ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#888', marginTop: 30 }}>No tienes conversaciones aún.</Text>}
+            renderItem={({ item }) => (
+              <View style={convStyles.item}>
+                <View style={convStyles.conversationInfo}>
+                  <Text style={convStyles.title}>{getConversationName(item)}</Text>
+                  <Text style={convStyles.conversationId}>ID: {item.id}</Text>
+                </View>
+                <TouchableOpacity style={convStyles.enterBtn} onPress={() => handleEnterConversation(item.id)}>
+                  <Text style={{ color: '#fff' }}>Entrar</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            style={{ marginTop: 20 }}
+          />
+        )}
+      </ThemedView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+  },  header: {
+    backgroundColor: '#273c75',
+    paddingTop: 50,
+    paddingBottom: 15,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+  },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-  logoutButton: {
-    marginTop: 15,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
+    gap: 8,  },  logoutButton: {
+    backgroundColor: '#e84118',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
   },
   logoutButtonText: {
     color: 'white',
     fontWeight: 'bold',
+    fontSize: 14,
   },
 });
 
@@ -136,10 +217,20 @@ const convStyles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
+  conversationInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
   title: {
     color: '#273c75',
     fontWeight: '600',
     fontSize: 16,
+    marginBottom: 4,
+  },
+  conversationId: {
+    color: '#666',
+    fontSize: 12,
+    fontStyle: 'italic',
   },
   enterBtn: {
     backgroundColor: '#273c75',

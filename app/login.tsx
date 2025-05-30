@@ -69,8 +69,8 @@ export default function LoginScreen() {
             style={styles.logo} 
             resizeMode="contain"
           />
-            <ThemedText style={styles.title} type="title">Welcome Back</ThemedText>
-          <ThemedText style={styles.subtitle} type="subtitle">Sign in to continue</ThemedText>
+            <ThemedText style={styles.title} type="title">MyVoice Chat</ThemedText>
+          <ThemedText style={styles.subtitle} type="subtitle">Iniciar sesión para continuar</ThemedText>
           
           <ErrorMessage
             error={displayError}

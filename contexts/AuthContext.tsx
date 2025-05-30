@@ -1,6 +1,6 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
 import { AuthService, setAuthToken } from '@/services/api';
 
@@ -114,8 +114,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('Register error', e.response?.data || e.message);
       setError(e.response?.data?.detail || 'Registration failed. Please try again.');
     }
-  };
-  const logout = async () => {
+  };  const logout = async () => {
+    console.log('Logout called - limpiando datos de sesión...');
+    
     // Clear storage
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('userId');
@@ -132,8 +133,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       username: null,
     });
     
-    // Navigate to welcome screen
-    router.replace('/');
+    // NO hacer navegación automática - dejar que el componente la controle
+    console.log('Estado de autenticación limpiado exitosamente');
   };
 
   const clearError = () => {
