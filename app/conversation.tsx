@@ -1,0 +1,633 @@
+import { useAuth } from '@/contexts/AuthContext';
+import { createAuthenticatedAPI } from '@/services/api';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+
+// Actualiza la interfaz Message para incluir sender
+interface Message {
+  id: number;
+  sender_id: number;
+  content: string;
+  created_at: string;
+  content_type?: string;
+  media_url?: string | null;
+  is_read?: boolean;
+  conversation_id?: number;
+  temp?: boolean; // Para mensajes optimistas
+  sender?: {
+    id: number;
+    username: string;
+    email?: string;
+    primary_language?: string;
+    created_at?: string;
+    is_active?: boolean;
+  };
+}
+
+// Tipos de mensajes WebSocket
+interface WebSocketMessage {
+  type: 'new_message' | 'user_joined' | 'user_left' | 'typing' | 'message_read';
+  data?: any;
+  user_id?: number;
+  is_typing?: boolean;
+}
+
+interface Participant {
+  user: {
+    id: number;
+    username: string;
+    primary_language?: string;
+  };
+}
+
+export default function ConversationScreen() {
+  const { id } = useLocalSearchParams();
+  const router = useRouter();
+  const { authState } = useAuth();
+  
+  console.log('ConversationScreen mounted with id:', id);
+  console.log('Auth state:', authState.token ? 'authenticated' : 'not authenticated');
+    const [participants, setParticipants] = useState<Participant[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rawMessagesResponse, setRawMessagesResponse] = useState<any>(null);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+    // Refs
+  const flatListRef = useRef<FlatList>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
+  const heartbeatRef = useRef<number | null>(null);
+  
+  // WebSocket state
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const maxReconnectAttempts = 5;  // Función para conectar WebSocket
+  const connectWebSocket = () => {
+    if (!authState.token || !id || wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    // Usar la misma URL que funciona en el HTML
+    const wsUrl = `ws://localhost:8080/api/v1/ws/${id}?token=${encodeURIComponent(authState.token)}`;
+    console.log('Conectando WebSocket a:', wsUrl);
+    
+    try {
+      wsRef.current = new WebSocket(wsUrl);    wsRef.current.onopen = () => {
+      console.log('WebSocket conectado');
+      setIsConnected(true);
+      setReconnectAttempts(0);
+      startHeartbeat();
+    };
+
+    wsRef.current.onmessage = (event) => {
+      if (event.data === 'pong') return; // Ignorar pongs
+      
+      try {
+        const message: WebSocketMessage = JSON.parse(event.data);
+        console.log('WebSocket mensaje recibido:', message);
+          switch (message.type) {
+          case 'new_message':
+            if (message.data) {
+              setMessages(prev => {
+                // Si es mi propio mensaje, verificar si hay uno temporal para reemplazar
+                if (message.data.sender_id === authState.userId) {
+                  const tempIndex = prev.findIndex(m => m.temp && m.content === message.data.content);
+                  if (tempIndex !== -1) {
+                    // Reemplazar mensaje temporal con el real
+                    const updated = [...prev];
+                    updated[tempIndex] = message.data;
+                    console.log('Mensaje temporal reemplazado con real:', message.data.id);
+                    return updated;
+                  }
+                }
+                
+                // Verificar si el mensaje ya existe para evitar duplicados
+                const exists = prev.find(m => m.id === message.data.id && !m.temp);
+                if (exists) {
+                  console.log('Mensaje duplicado ignorado:', message.data.id);
+                  return prev;
+                }
+                
+                // Agregar nuevo mensaje si no es duplicado
+                return [...prev, message.data];
+              });
+              setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+            }
+            break;
+            
+          case 'typing':
+            if (message.user_id !== authState.userId) {
+              const participant = participants.find(p => p.user.id === message.user_id);
+              const username = participant?.user.username || 'Usuario';
+              
+              if (message.is_typing) {
+                setTypingUsers(prev => [...new Set([...prev, username])]);
+              } else {
+                setTypingUsers(prev => prev.filter(u => u !== username));
+              }
+            }
+            break;
+            
+          case 'user_joined':
+          case 'user_left':
+            // Recargar participantes si es necesario
+            break;
+        }
+      } catch (error) {
+        console.error('Error al procesar mensaje WebSocket:', error);
+      }
+    };    wsRef.current.onclose = (event) => {
+      console.log('WebSocket desconectado:', event.code, event.reason);
+      setIsConnected(false);
+      stopHeartbeat();
+      
+      // Reconectar automáticamente si no fue intencional
+      if (event.code !== 1000 && event.code !== 4001 && event.code !== 4003 && reconnectAttempts < maxReconnectAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+        console.log(`Reintentando conexión en ${delay}ms (intento ${reconnectAttempts + 1})`);
+        
+        reconnectTimeoutRef.current = setTimeout(() => {
+          setReconnectAttempts(prev => prev + 1);
+          connectWebSocket();
+        }, delay);
+      } else if (event.code === 4001) {
+        console.error('Token inválido - problema de autenticación');
+        setError('Sesión expirada. Por favor vuelve a iniciar sesión.');
+      } else if (event.code === 4003) {
+        console.error('Sin acceso a la conversación');
+        setError('No tienes acceso a esta conversación.');
+      }
+    };
+
+    wsRef.current.onerror = (error) => {
+      console.error('Error WebSocket:', error);
+      setIsConnected(false);
+    };
+
+    } catch (error) {
+      console.error('Error creating WebSocket:', error);
+      // Intentar reconectar después de un error
+      if (reconnectAttempts < maxReconnectAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+        reconnectTimeoutRef.current = setTimeout(() => {
+          setReconnectAttempts(prev => prev + 1);
+          connectWebSocket();
+        }, delay);
+      }
+    }
+  };
+
+  // Función para desconectar WebSocket
+  const disconnectWebSocket = () => {
+    if (wsRef.current) {
+      wsRef.current.close(1000, 'Desconexión intencional');
+      wsRef.current = null;
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    stopHeartbeat();
+    setIsConnected(false);
+  };
+  // Sistema de heartbeat para mantener la conexión viva
+  const startHeartbeat = () => {
+    heartbeatRef.current = setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send('ping'); // Enviar como string simple, igual que el HTML
+      }
+    }, 30000); // Ping cada 30 segundos
+  };
+
+  const stopHeartbeat = () => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+  };
+  // Cargar datos iniciales y conectar WebSocket
+  useEffect(() => {
+    if (!authState.token || !id) return;
+    
+    // Limpiar conexión anterior si existe
+    disconnectWebSocket();
+    
+    const api = createAuthenticatedAPI(authState.token);
+    setLoading(true);
+      Promise.all([
+      api.get(`http://localhost:8080/api/v1/participants/conversation/${id}`, {
+        headers: { 'Authorization': 'Bearer ' + authState.token }
+      }),
+      api.get(`http://localhost:8080/api/v1/messages/conversation/${id}`, {
+        headers: { 'Authorization': 'Bearer ' + authState.token }
+      })
+    ])
+      .then(([pRes, mRes]) => {
+        setParticipants(pRes.data);
+        setMessages(Array.isArray(mRes.data) ? mRes.data : (mRes.data.messages || []));
+        console.log('Respuesta de mensajes:', mRes.data);
+        setRawMessagesResponse(mRes.data);
+        
+        // Conectar WebSocket después de cargar los datos
+        setTimeout(() => {
+          if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+            connectWebSocket();
+          }
+        }, 500);
+      })
+      .catch((e) => {
+        setError('Error al cargar la conversación');
+        console.log('Error al cargar mensajes:', e);
+      })
+      .finally(() => setLoading(false));
+
+    // Cleanup al desmontar
+    return () => {
+      disconnectWebSocket();
+    };
+  }, [authState.token, id]); // Agregar dependencias correctas
+
+  useEffect(() => {
+    console.log('ConversationScreen mounted. id param:', id);
+  }, [id]);
+  // Función para enviar indicador de typing
+  const sendTypingStatus = (isTyping: boolean) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'typing',
+        is_typing: isTyping,
+        user_id: authState.userId
+      }));
+    }
+  };
+
+  // Manejar cambios en el input (para typing indicators)
+  const handleInputChange = (text: string) => {
+    setInput(text);
+    
+    // Enviar indicador de typing
+    sendTypingStatus(true);
+    
+    // Clear timeout anterior
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Detener typing después de 3 segundos de inactividad
+    typingTimeoutRef.current = setTimeout(() => {
+      sendTypingStatus(false);
+    }, 3000);
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || !authState.token) return;
+    
+    setSending(true);
+    setError(null);
+    
+    // Detener typing indicator
+    sendTypingStatus(false);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Crear mensaje optimista
+    const tempMessage: Message = {
+      id: Date.now(), // ID temporal
+      sender_id: authState.userId!,
+      content: input.trim(),
+      created_at: new Date().toISOString(),
+      temp: true,
+      sender: {
+        id: authState.userId!,
+        username: 'Tú'
+      }
+    };
+    
+    // Agregar mensaje optimista inmediatamente
+    setMessages(prev => [...prev, tempMessage]);
+    const messageContent = input.trim();
+    setInput('');
+    
+    // Scroll al final
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    
+    try {
+      const api = createAuthenticatedAPI(authState.token);
+      const form = new FormData();
+      form.append('conversation_id', id as string);
+      form.append('content_type', 'text');
+      form.append('content', messageContent);
+        const res = await fetch('http://localhost:8080/api/v1/messages/', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + authState.token
+          // No poner Content-Type, fetch lo maneja con FormData
+        },
+        body: form
+      });
+        if (res.ok) {
+        const data = await res.json();
+        // No necesitamos hacer nada aquí - el WebSocket se encargará
+        // El mensaje temporal se reemplazará automáticamente cuando llegue por WebSocket
+        console.log('Mensaje enviado exitosamente:', data.id);
+      } else {
+        throw new Error('Error al enviar mensaje');
+      }
+      
+      // No enviar por WebSocket aquí - el servidor se encarga de broadcast
+      
+    } catch (e) {
+      // Remover mensaje temporal en caso de error
+      setMessages(prev => prev.filter(msg => !(msg.temp && msg.id === tempMessage.id)));
+      setError('No se pudo enviar el mensaje');
+      setInput(messageContent); // Restaurar el texto
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Cambia la función para usar el sender del mensaje si existe
+  const getUsername = (item: Message) => {
+    if (item.sender && item.sender.username) return item.sender.username;
+    const p = participants.find(p => p.user.id === item.sender_id);
+    return p ? p.user.username : 'Usuario';
+  };  const renderItem = ({ item, index }: { item: Message, index: number }) => {
+    const isMe = item.sender_id === authState.userId;
+    const showUsername = !isMe && (index === 0 || messages[index-1]?.sender_id !== item.sender_id);
+    
+    return (
+      <View style={[styles.messageContainer, isMe ? styles.meContainer : styles.otherContainer]}>
+        {showUsername && (
+          <Text style={styles.username}>{getUsername(item)}</Text>
+        )}
+        <View style={[styles.messageRow, isMe ? styles.meRow : styles.otherRow]}>
+          <View style={[
+            styles.bubble, 
+            isMe ? styles.meBubble : styles.otherBubble,
+            item.temp && styles.tempMessage
+          ]}>
+            <Text style={[styles.messageText, item.temp && styles.tempText]}>
+              {item.content || '[Sin texto]'}
+            </Text>
+            {item.temp && (
+              <Text style={styles.sendingIndicator}>Enviando...</Text>
+            )}
+          </View>
+          <Text style={styles.time}>
+            {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  // Componente para mostrar usuarios escribiendo
+  const renderTypingIndicator = () => {
+    if (typingUsers.length === 0) return null;
+    
+    const typingText = typingUsers.length === 1 
+      ? `${typingUsers[0]} está escribiendo...`
+      : `${typingUsers.slice(0, -1).join(', ')} y ${typingUsers[typingUsers.length - 1]} están escribiendo...`;
+    
+    return (
+      <View style={styles.typingIndicator}>
+        <Text style={styles.typingText}>{typingText}</Text>
+        <View style={styles.typingDots}>
+          <View style={[styles.dot, styles.dot1]} />
+          <View style={[styles.dot, styles.dot2]} />
+          <View style={[styles.dot, styles.dot3]} />
+        </View>
+      </View>
+    );
+  };  return (
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#eaf0fb' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
+          <Text style={{ color: '#273c75', fontSize: 18 }}>← Volver</Text>
+        </TouchableOpacity>
+        <FlatList
+          data={participants}
+          keyExtractor={p => p.user.id.toString()}
+          horizontal
+          renderItem={({ item }) => (
+            <View style={styles.participant}><Text style={{ color: '#273c75' }}>{item.user.username}</Text></View>
+          )}
+          style={{ flexGrow: 0, marginLeft: 10 }}
+        />
+        {/* Indicador de estado de conexión */}
+        <View style={[styles.connectionStatus, !isConnected && styles.disconnected]}>
+          <Text style={styles.connectionStatusText}>
+            {isConnected ? '●' : '○'}
+          </Text>
+        </View>
+      </View>
+      {error && <Text style={styles.error}>{error}</Text>}
+      {loading ? <ActivityIndicator size="large" color="#273c75" style={{ marginTop: 40 }} /> : (
+        <>
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={item => `${item.id}-${item.temp ? 'temp' : 'real'}`}
+            renderItem={renderItem}
+            contentContainerStyle={{ padding: 16, paddingBottom: 10 }}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            ListEmptyComponent={<Text style={{ color: '#888', textAlign: 'center', marginTop: 30 }}>No hay mensajes en esta conversación.</Text>}
+          />
+          {renderTypingIndicator()}
+        </>
+      )}
+      <View style={styles.inputRow}>
+        <TextInput
+          style={styles.input}
+          value={input}
+          onChangeText={handleInputChange}
+          placeholder="Escribe un mensaje..."
+          editable={!sending}
+          onSubmitEditing={handleSend}
+          onBlur={() => sendTypingStatus(false)}
+        />
+        <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={sending || !input.trim()}>
+          <Text style={{ color: '#fff', fontSize: 18 }}>💬</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingTop: 18,
+    paddingBottom: 8,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderColor: '#e1e4ed',
+  },
+  backBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 5,
+    backgroundColor: '#dfe6e9',
+  },
+  participant: {
+    backgroundColor: '#dff9fb',
+    borderRadius: 12,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    marginRight: 6,
+    marginLeft: 2,
+  },  error: {
+    color: '#e84118',
+    textAlign: 'center',
+    marginVertical: 10,
+  },
+  messageContainer: {
+    marginBottom: 10,
+    maxWidth: '100%',
+  },
+  meContainer: {
+    alignItems: 'flex-end',
+  },
+  otherContainer: {
+    alignItems: 'flex-start',
+  },
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    maxWidth: '100%',
+  },
+  meRow: {
+    justifyContent: 'flex-end',
+  },
+  otherRow: {
+    justifyContent: 'flex-start',
+  },
+  bubble: {
+    maxWidth: '75%',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    marginHorizontal: 6,
+  },
+  meBubble: {
+    backgroundColor: '#273c75',
+    borderTopRightRadius: 4,
+    alignSelf: 'flex-end',
+  },
+  otherBubble: {
+    backgroundColor: '#66a6ff',
+    borderTopLeftRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  tempMessage: {
+    opacity: 0.7,
+  },
+  messageText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  tempText: {
+    fontStyle: 'italic',
+  },
+  sendingIndicator: {
+    color: '#fff',
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },  username: {
+    fontSize: 13,
+    color: '#273c75',
+    fontWeight: 'bold',
+    marginBottom: 4,
+    marginLeft: 6,
+  },
+  time: {
+    fontSize: 11,
+    color: '#aaa',
+    marginLeft: 2,
+    marginRight: 2,
+    alignSelf: 'flex-end',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f8f9fa',
+    borderTopWidth: 1,
+    borderTopColor: '#e1e4ed',
+  },
+  typingText: {
+    color: '#6c757d',
+    fontSize: 14,
+    fontStyle: 'italic',
+    marginRight: 8,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#6c757d',
+    marginHorizontal: 1,
+  },
+  dot1: {
+    animationDelay: '0s',
+  },
+  dot2: {
+    animationDelay: '0.2s',
+  },
+  dot3: {
+    animationDelay: '0.4s',
+  },
+  connectionStatus: {
+    backgroundColor: '#28a745',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  connectionStatusText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  disconnected: {
+    backgroundColor: '#dc3545',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderColor: '#e1e4ed',
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#f1f2f6',
+    borderRadius: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    fontSize: 16,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#dcdde1',
+  },
+  sendBtn: {
+    backgroundColor: '#273c75',
+    borderRadius: 50,
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

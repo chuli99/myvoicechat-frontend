@@ -1,28 +1,28 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, useSegments, useRouter } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Auth navigation wrapper
 function AuthNavigationWrapper({ children }: { children: React.ReactNode }) {
   const { authState } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  
-  useEffect(() => {
+    useEffect(() => {
     if (!authState.isLoading) {
       const inAuthGroup = segments[0] === '(tabs)';
+      const inConversation = segments[0] === 'conversation';
       
-      if (authState.token && !inAuthGroup) {
-        // Redirect to the home page if we have a token and aren't in the authenticated group
+      if (authState.token && !inAuthGroup && !inConversation) {
+        // Redirect to the home page if we have a token and aren't in the authenticated group or conversation
         router.replace('/(tabs)');
-      } else if (!authState.token && inAuthGroup) {
-        // Redirect to welcome page if we have no token but are in the authenticated group
+      } else if (!authState.token && (inAuthGroup || inConversation)) {
+        // Redirect to welcome page if we have no token but are in the authenticated group or conversation
         router.replace('/');
       }
     }
@@ -58,6 +58,7 @@ export default function RootLayout() {
             <Stack.Screen name="+not-found" />
             <Stack.Screen name="login" options={{ headerShown: false }} />
             <Stack.Screen name="register" options={{ headerShown: false }} />
+            <Stack.Screen name="conversation" options={{ headerShown: false }} />
           </Stack>
           <StatusBar style="auto" />
         </AuthNavigationWrapper>

@@ -72,14 +72,13 @@ export function ThemedButton({
     <TouchableOpacity
       style={[buttonStyle, style]}
       disabled={isLoading || restProps.disabled}
-      {...restProps}
-    >
-      {isLoading ? (
+      {...restProps}    >      {isLoading ? (
         <ActivityIndicator 
           color={variant === 'primary' ? '#fff' : tintColor}
           size="small"
         />
-      ) : (        <React.Fragment>
+      ) : (
+        <React.Fragment>
           {leftIcon && <React.Fragment>{leftIcon}</React.Fragment>}
           <Text style={textStyle}>{title}</Text>
           {rightIcon && <React.Fragment>{rightIcon}</React.Fragment>}
