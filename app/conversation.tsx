@@ -23,6 +23,8 @@ interface Message {
     created_at?: string;
     is_active?: boolean;
   };
+  translatedContent?: string; // Contenido traducido cacheado
+  isLoadingTranslation?: boolean; // Estado de carga de traducción
 }
 
 // Tipos de mensajes WebSocket
@@ -349,12 +351,55 @@ export default function ConversationScreen() {
       setSending(false);
     }
   };
-
   // Cambia la función para usar el sender del mensaje si existe
   const getUsername = (item: Message) => {
     if (item.sender && item.sender.username) return item.sender.username;
     const p = participants.find(p => p.user.id === item.sender_id);
     return p ? p.user.username : 'Usuario';
+  };
+
+  // Función para obtener traducción del mensaje
+  const getTranslation = async (messageId: number) => {
+    if (!authState.token) return;
+
+    try {
+      // Marcar como cargando
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId 
+          ? { ...msg, isLoadingTranslation: true }
+          : msg
+      ));
+
+      const response = await fetch(`http://localhost:8080/api/v1/translations/message/${messageId}`, {
+        headers: {
+          'Authorization': `Bearer ${authState.token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Actualizar el mensaje con la traducción
+        setMessages(prev => prev.map(msg => 
+          msg.id === messageId 
+            ? { 
+                ...msg, 
+                translatedContent: data.translated_content,
+                isLoadingTranslation: false 
+              }
+            : msg
+        ));
+      } else {
+        throw new Error('Error al obtener traducción');
+      }
+    } catch (error) {
+      console.error('Error al obtener traducción:', error);
+      // Quitar estado de carga en caso de error
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId 
+          ? { ...msg, isLoadingTranslation: false }
+          : msg
+      ));
+    }
   };  const renderItem = ({ item, index }: { item: Message, index: number }) => {
     const isMe = item.sender_id === authState.userId;
     const showUsername = !isMe && (index === 0 || messages[index-1]?.sender_id !== item.sender_id);
@@ -373,6 +418,31 @@ export default function ConversationScreen() {
             <Text style={[styles.messageText, item.temp && styles.tempText]}>
               {item.content || '[Sin texto]'}
             </Text>
+            
+            {/* Botón de traducir - solo para mensajes reales (no temporales) */}
+            {!item.temp && (
+              <View style={styles.translationSection}>
+                {!item.translatedContent && !item.isLoadingTranslation && (
+                  <TouchableOpacity 
+                    onPress={() => getTranslation(item.id)}
+                    style={styles.translateButton}
+                  >
+                    <Text style={styles.translateText}>Traducir</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {item.isLoadingTranslation && (
+                  <Text style={styles.loadingTranslation}>Traduciendo...</Text>
+                )}
+                
+                {item.translatedContent && (
+                  <Text style={styles.translatedText}>
+                    {item.translatedContent}
+                  </Text>
+                )}
+              </View>
+            )}
+            
             {item.temp && (
               <Text style={styles.sendingIndicator}>Enviando...</Text>
             )}
@@ -622,12 +692,41 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderWidth: 1,
     borderColor: '#dcdde1',
-  },
-  sendBtn: {
+  },  sendBtn: {
     backgroundColor: '#273c75',
     borderRadius: 50,
     padding: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  translationSection: {
+    marginTop: 8,
+  },
+  translateButton: {
+    marginTop: 4,
+  },  translateText: {
+    color: '#4A90E2',
+    fontSize: 12,
+    textDecorationLine: 'underline',
+    opacity: 1,
+    fontWeight: '500',
+  },
+  loadingTranslation: {
+    color: '#fff',
+    fontSize: 12,
+    fontStyle: 'italic',
+    opacity: 0.8,
+    marginTop: 4,
+  },  translatedText: {
+    color: '#E8F4FD',
+    fontSize: 14,
+    fontStyle: 'italic',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 8,
+    borderRadius: 4,
   },
 });
