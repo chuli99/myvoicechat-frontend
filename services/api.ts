@@ -47,6 +47,15 @@ export const setAuthToken = (token: string) => {
   }
 };
 
+// User services
+export const UserService = {
+  getProfile: async (token: string) => {
+    const api = createAuthenticatedAPI(token);
+    const response = await api.get('/users/profile');
+    return response.data;
+  },
+};
+
 // User API with authentication
 export const createAuthenticatedAPI = (token: string) => {
   const api = axios.create({
@@ -60,4 +69,4 @@ export const createAuthenticatedAPI = (token: string) => {
   return api;
 };
 
-export default { AuthService, setAuthToken, createAuthenticatedAPI };
+export default { AuthService, UserService, setAuthToken, createAuthenticatedAPI };

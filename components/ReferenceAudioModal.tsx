@@ -215,29 +215,10 @@ export default function ReferenceAudioModal({ visible, onClose, token }: Referen
     Alert.alert(
       'Error', 
       error.message || 'Error al subir el audio de referencia'
-    );
-  } finally {
+    );  } finally {
     setUploading(false);
   }
 };
-
-  const handleSkip = () => {
-    Alert.alert(
-      'Omitir audio de referencia',
-      '¿Estás seguro de que quieres omitir la subida del audio de referencia? Esto puede afectar la calidad del reconocimiento de voz.',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-        {
-          text: 'Omitir',
-          style: 'destructive',
-          onPress: onClose,
-        },
-      ]
-    );
-  };
 
   return (
     <Modal
@@ -246,12 +227,22 @@ export default function ReferenceAudioModal({ visible, onClose, token }: Referen
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <ThemedView style={styles.modalContainer}>
-          <ThemedText style={styles.title}>Audio de Referencia</ThemedText>
+      <View style={styles.overlay}>        <ThemedView style={styles.modalContainer}>
+          {/* Botón de cerrar */}
+          <TouchableOpacity 
+            style={styles.closeButton} 
+            onPress={onClose}
+            disabled={uploading}
+          >
+            <Text style={styles.closeButtonText}>✕</Text>
+          </TouchableOpacity>
+
+          <ThemedText style={styles.title}>
+            Audio de Referencia
+          </ThemedText>
           
-          <ThemedText style={styles.description}>
-            Para el correcto uso de este chat, necesitamos un audio de usted diciendo la siguiente frase:
+          <ThemedText style={[styles.description, styles.blueText]}>
+            Puedes actualizar tu audio de referencia para mejorar el reconocimiento de voz.
           </ThemedText>
           
           <View style={styles.phraseContainer}>
@@ -318,17 +309,8 @@ export default function ReferenceAudioModal({ visible, onClose, token }: Referen
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <Text style={styles.uploadButtonText}>Enviar</Text>
-              )}
-            </TouchableOpacity>
+              )}            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity 
-            style={styles.skipButton} 
-            onPress={handleSkip}
-            disabled={uploading}
-          >
-            <Text style={styles.skipButtonText}>Omitir por ahora</Text>
-          </TouchableOpacity>
         </ThemedView>
       </View>
     </Modal>
@@ -428,18 +410,28 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 16,
-  },
-  disabledButton: {
+  },  disabledButton: {
     backgroundColor: '#ddd',
   },
-  skipButton: {
-    padding: 10,
+  closeButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f1f2f6',
+    justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 1,
   },
-  skipButtonText: {
+  closeButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: '#666',
-    fontSize: 14,
-    textDecorationLine: 'underline',
+  },
+  blueText: {
+    color: '#273c75',
   },
   recordingSection: {
     marginBottom: 20,

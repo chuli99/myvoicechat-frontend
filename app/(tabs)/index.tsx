@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -15,11 +14,10 @@ export default function HomeScreen() {
   const { authState, logout } = useAuth();
   const colorScheme = useColorScheme();
   const tintColor = Colors[colorScheme ?? 'light'].tint;
-  const router = useRouter();
-  const [conversations, setConversations] = useState<any[]>([]);
+  const router = useRouter();  const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAudioModal, setShowAudioModal] = useState(false);  useEffect(() => {
+  const [showAudioModal, setShowAudioModal] = useState(false);useEffect(() => {
     const fetchConversations = async () => {
       if (!authState.token) return;
       setLoading(true);
@@ -58,36 +56,14 @@ export default function HomeScreen() {
         setLoading(false);
       }
     };
-    fetchConversations();
-  }, [authState.token]);  // Mostrar modal de audio de referencia cuando el usuario se loguea
-  useEffect(() => {
-    const checkAudioModalStatus = async () => {
-      if (authState.token && !loading) {
-        try {
-          // Verificar si ya se mostró el modal en esta sesión
-          const audioModalShown = await AsyncStorage.getItem('audioModalShown');
-          if (!audioModalShown) {
-            setShowAudioModal(true);
-          }
-        } catch (error) {
-          console.error('Error checking audio modal status:', error);
-          // En caso de error, mostrar el modal por defecto
-          setShowAudioModal(true);
-        }
-      }
-    };
-    
-    checkAudioModalStatus();
-  }, [authState.token, loading]);
+    fetchConversations();  }, [authState.token]);
 
-  const handleCloseAudioModal = async () => {
+  const handleCloseAudioModal = () => {
     setShowAudioModal(false);
-    try {
-      // Marcar que ya se mostró el modal en esta sesión
-      await AsyncStorage.setItem('audioModalShown', 'true');
-    } catch (error) {
-      console.error('Error saving audio modal status:', error);
-    }
+  };
+
+  const handleShowAudioModalManually = () => {
+    setShowAudioModal(true);
   };const handleEnterConversation = (id: number) => {
     console.log('handleEnterConversation called with id:', id);
     console.log('Current auth state:', authState.token ? 'authenticated' : 'not authenticated');
@@ -132,32 +108,23 @@ export default function HomeScreen() {
     try {
       console.log('🔐 Iniciando proceso de cierre de sesión...');
       
-      // 1. Limpiar datos de sesión (patrón estándar web)
+      // Limpiar datos de sesión
       await logout();
       
-      // 2. Limpiar flag del modal de audio para próximo login
-      try {
-        await AsyncStorage.removeItem('audioModalShown');
-      } catch (error) {
-        console.error('Error clearing audio modal flag:', error);
-      }
-      
-      // 3. Forzar navegación al login (como Facebook, WhatsApp, etc.)
+      // Forzar navegación al login
       console.log('📱 Redirigiendo al login...');
       router.replace('/login');
       
-      // 4. Confirmación de éxito (patrón estándar web)
       console.log('✅ Sesión cerrada exitosamente');
       
     } catch (error) {
       console.error('❌ Error al cerrar sesión:', error);
-      // En caso de error, forzar navegación de todas formas (fallback seguro)
+      // En caso de error, forzar navegación de todas formas
       router.replace('/login');
     }
   };
   return (
-    <ThemedView style={styles.container}>      {/* Modal de audio de referencia */}
-      <ReferenceAudioModal
+    <ThemedView style={styles.container}>      {/* Modal de audio de referencia */}      <ReferenceAudioModal
         visible={showAudioModal}
         onClose={handleCloseAudioModal}
         token={authState.token || ''}
@@ -166,9 +133,20 @@ export default function HomeScreen() {
       {/* Header MyVoice Chat */}
       <ThemedView style={styles.header}>
         <ThemedText style={styles.headerTitle}>MyVoice Chat</ThemedText>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <ThemedText style={styles.logoutButtonText}>Cerrar sesión</ThemedText>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          {/* Botón para subir audio de referencia */}          <TouchableOpacity 
+            style={styles.audioButton} 
+            onPress={handleShowAudioModalManually}
+          >
+            <ThemedText style={styles.audioButtonText}>
+              🎙️ Audio de Referencia
+            </ThemedText>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <ThemedText style={styles.logoutButtonText}>Cerrar sesión</ThemedText>
+          </TouchableOpacity>
+        </View>
       </ThemedView>
       
       {/* Content */}
@@ -228,11 +206,26 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
-  },
-  titleContainer: {
+  },  titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,  },  logoutButton: {
+    gap: 8,  },  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  audioButton: {
+    backgroundColor: '#00a8ff',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  audioButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  logoutButton: {
     backgroundColor: '#e84118',
     paddingVertical: 8,
     paddingHorizontal: 16,
