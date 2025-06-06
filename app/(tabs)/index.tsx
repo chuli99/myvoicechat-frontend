@@ -2,9 +2,11 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import CreateConversationModal from '@/components/CreateConversationModal';
+import JoinConversationModal from '@/components/JoinConversationModal';
+import ReferenceAudioModal from '@/components/ReferenceAudioModal';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import ReferenceAudioModal from '@/components/ReferenceAudioModal';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -17,53 +19,70 @@ export default function HomeScreen() {
   const router = useRouter();  const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAudioModal, setShowAudioModal] = useState(false);useEffect(() => {
-    const fetchConversations = async () => {
-      if (!authState.token) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const api = createAuthenticatedAPI(authState.token);
-        const res = await api.get('http://localhost:8080/api/v1/conversations');
-        
-        // Para cada conversación, obtener también los participantes
-        const conversationsWithParticipants = await Promise.all(
-          res.data.map(async (conv: any) => {
-            try {
-              const participantsRes = await api.get(`http://localhost:8080/api/v1/participants/conversation/${conv.id}`);
-              return {
-                ...conv,
-                participants: participantsRes.data
-              };
-            } catch (error) {
-              console.error(`Error loading participants for conversation ${conv.id}:`, error);
-              return {
-                ...conv,
-                participants: []
-              };
-            }
-          })
-        );
-        
-        setConversations(conversationsWithParticipants);
-      } catch (e: any) {
-        if (e.response?.status === 401) {
-          logout();
-        } else {
-          setError(e.response?.data?.detail || 'Error al cargar conversaciones');
-        }
-      } finally {
-        setLoading(false);
+  const [showAudioModal, setShowAudioModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+
+  const fetchConversations = async () => {
+    if (!authState.token) return;
+    setLoading(true);
+    setError(null);    try {
+      const api = createAuthenticatedAPI(authState.token);
+      const res = await api.get('/conversations');
+      
+      // Para cada conversación, obtener también los participantes
+      const conversationsWithParticipants = await Promise.all(
+        res.data.map(async (conv: any) => {
+          try {
+            const participantsRes = await api.get(`/participants/conversation/${conv.id}`);
+            return {
+              ...conv,
+              participants: participantsRes.data
+            };
+          } catch (error) {
+            console.error(`Error loading participants for conversation ${conv.id}:`, error);
+            return {
+              ...conv,
+              participants: []
+            };
+          }
+        })
+      );
+      
+      setConversations(conversationsWithParticipants);
+    } catch (e: any) {
+      if (e.response?.status === 401) {
+        logout();
+      } else {
+        setError(e.response?.data?.detail || 'Error al cargar conversaciones');
       }
-    };
-    fetchConversations();  }, [authState.token]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchConversations();
+  }, [authState.token]);
 
   const handleCloseAudioModal = () => {
     setShowAudioModal(false);
   };
-
   const handleShowAudioModalManually = () => {
     setShowAudioModal(true);
+  };
+
+  const handleShowCreateModal = () => {
+    setShowCreateModal(true);
+  };
+
+  const handleShowJoinModal = () => {
+    setShowJoinModal(true);
+  };
+
+  const handleConversationCreatedOrJoined = () => {
+    // Refrescar la lista de conversaciones
+    fetchConversations();
   };const handleEnterConversation = (id: number) => {
     console.log('handleEnterConversation called with id:', id);
     console.log('Current auth state:', authState.token ? 'authenticated' : 'not authenticated');
@@ -124,10 +143,28 @@ export default function HomeScreen() {
     }
   };
   return (
-    <ThemedView style={styles.container}>      {/* Modal de audio de referencia */}      <ReferenceAudioModal
+    <ThemedView style={styles.container}>      {/* Modal de audio de referencia */}
+      <ReferenceAudioModal
         visible={showAudioModal}
         onClose={handleCloseAudioModal}
         token={authState.token || ''}
+      />
+
+      {/* Modal para crear conversación */}
+      <CreateConversationModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onConversationCreated={handleConversationCreatedOrJoined}
+        token={authState.token || ''}
+      />
+
+      {/* Modal para unirse a conversación */}
+      <JoinConversationModal
+        visible={showJoinModal}
+        onClose={() => setShowJoinModal(false)}
+        onConversationJoined={handleConversationCreatedOrJoined}
+        token={authState.token || ''}
+        userId={authState.userId || 0}
       />
 
       {/* Header MyVoice Chat */}
@@ -150,9 +187,25 @@ export default function HomeScreen() {
       </ThemedView>
       
       {/* Content */}
-      <ThemedView style={styles.content}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="title">Mis Conversaciones</ThemedText>
+      <ThemedView style={styles.content}>        <ThemedView style={styles.titleContainer}>
+          <ThemedText style={styles.conversationsTitle}>Mis Conversaciones</ThemedText>
+          <View style={styles.conversationButtons}>
+            <TouchableOpacity 
+              style={styles.createButton} 
+              onPress={handleShowCreateModal}
+              disabled={loading}
+            >
+              <Text style={styles.createButtonText}>+ Crear</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.joinButton} 
+              onPress={handleShowJoinModal}
+              disabled={loading}
+            >
+              <Text style={styles.joinButtonText}>🔗 Unirse</Text>
+            </TouchableOpacity>
+          </View>
         </ThemedView>
         {error && <Text style={{ color: '#e84118', marginBottom: 10 }}>{error}</Text>}
         {loading ? (
@@ -209,7 +262,13 @@ const styles = StyleSheet.create({
   },  titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,  },  headerButtons: {
+    gap: 8,
+  },
+  conversationsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#273c75',
+  },headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -230,11 +289,37 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 6,
-  },
-  logoutButtonText: {
+  },  logoutButtonText: {
     color: 'white',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  conversationButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  createButton: {
+    backgroundColor: '#00a8ff',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  createButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  joinButton: {
+    backgroundColor: '#44bd32',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  joinButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
   },
 });
 

@@ -1,3 +1,4 @@
+import AddParticipantModal from '@/components/AddParticipantModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { createAuthenticatedAPI } from '@/services/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -50,7 +51,7 @@ export default function ConversationScreen() {
   
   console.log('ConversationScreen mounted with id:', id);
   console.log('Auth state:', authState.token ? 'authenticated' : 'not authenticated');
-    const [participants, setParticipants] = useState<Participant[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -59,16 +60,34 @@ export default function ConversationScreen() {
   const [rawMessagesResponse, setRawMessagesResponse] = useState<any>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [showAddParticipantModal, setShowAddParticipantModal] = useState(false);
     // Refs
   const flatListRef = useRef<FlatList>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
   const heartbeatRef = useRef<number | null>(null);
-  
-  // WebSocket state
+    // WebSocket state
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
-  const maxReconnectAttempts = 5;  // Función para conectar WebSocket
+  const maxReconnectAttempts = 5;
+  // Función para refrescar participantes
+  const fetchParticipants = async () => {
+    if (!authState.token || !id) return;
+    
+    try {
+      const api = createAuthenticatedAPI(authState.token);
+      const response = await api.get(`/participants/conversation/${id}`);
+      setParticipants(response.data);
+      console.log('Participantes actualizados:', response.data);
+    } catch (error) {
+      console.error('Error al cargar participantes:', error);
+    }
+  };
+  // Manejar cuando se agrega un participante
+  const handleParticipantAdded = () => {
+    fetchParticipants(); // Refrescar la lista de participantes
+    // También podríamos emitir un evento WebSocket para notificar a otros usuarios
+  };// Función para conectar WebSocket
   const connectWebSocket = () => {
     if (!authState.token || !id || wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -475,6 +494,15 @@ export default function ConversationScreen() {
     );
   };  return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#eaf0fb' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Modal para agregar participante */}
+      <AddParticipantModal
+        visible={showAddParticipantModal}
+        onClose={() => setShowAddParticipantModal(false)}
+        onParticipantAdded={handleParticipantAdded}
+        token={authState.token || ''}
+        conversationId={id as string}
+      />
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
           <Text style={{ color: '#273c75', fontSize: 18 }}>← Volver</Text>
@@ -487,13 +515,20 @@ export default function ConversationScreen() {
             <View style={styles.participant}><Text style={{ color: '#273c75' }}>{item.user.username}</Text></View>
           )}
           style={{ flexGrow: 0, marginLeft: 10 }}
-        />
-        {/* Indicador de estado de conexión */}
+        />        {/* Indicador de estado de conexión */}
         <View style={[styles.connectionStatus, !isConnected && styles.disconnected]}>
           <Text style={styles.connectionStatusText}>
             {isConnected ? '●' : '○'}
           </Text>
         </View>
+        
+        {/* Botón para agregar participante */}
+        <TouchableOpacity 
+          style={styles.addParticipantButton} 
+          onPress={() => setShowAddParticipantModal(true)}
+        >
+          <Text style={styles.addParticipantText}>+👤</Text>
+        </TouchableOpacity>
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
       {loading ? <ActivityIndicator size="large" color="#273c75" style={{ marginTop: 40 }} /> : (
@@ -670,9 +705,20 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
-  },
-  disconnected: {
+  },  disconnected: {
     backgroundColor: '#dc3545',
+  },
+  addParticipantButton: {
+    backgroundColor: '#00a8ff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  addParticipantText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   inputRow: {
     flexDirection: 'row',

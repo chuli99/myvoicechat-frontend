@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const BASE_URL_AUTH = 'http://127.0.0.1:8080/api/v1';
-const BASE_URL_USER = 'http://127.0.0.1:8080/api/v1';
+const BASE_URL_AUTH = 'http://localhost:8080/api/v1';
+const BASE_URL_USER = 'http://localhost:8080/api/v1';
 
 // Create API instances
 const authAPI = axios.create({
