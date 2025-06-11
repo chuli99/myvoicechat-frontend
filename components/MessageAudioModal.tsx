@@ -173,15 +173,14 @@ export default function MessageAudioModal({
             name: selectedAudio.name || 'message_audio.mp3',
           } as any);
         }
-      }
-
-      console.log('🔍 Enviando FormData de audio de mensaje con:');
+      }      console.log('🔍 Enviando FormData de audio de mensaje con:');
       console.log('Platform:', Platform.OS);
       console.log('Token:', token ? 'Presente' : 'Faltante');
       console.log('Conversation ID:', conversationId);
-      console.log('URL:', 'http://localhost:8080/api/v1/audio/upload-message-audio');
+      console.log('URL:', 'http://localhost:8080/api/v1/messages/');
 
-      const response = await fetch('http://localhost:8080/api/v1/audio/upload-message-audio', {
+      // Usar el mismo endpoint que los mensajes de texto para unificar el comportamiento
+      const response = await fetch('http://localhost:8080/api/v1/messages/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

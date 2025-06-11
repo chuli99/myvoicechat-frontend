@@ -94,30 +94,13 @@ export default function ConversationScreen() {
   const handleParticipantAdded = () => {
     fetchParticipants(); // Refrescar la lista de participantes
     // También podríamos emitir un evento WebSocket para notificar a otros usuarios
-  };
-  // Manejar cuando se envía un audio
+  };  // Manejar cuando se envía un audio - Unificado con el comportamiento de texto
   const handleAudioSent = () => {
-    // Crear mensaje temporal de audio
-    const tempMessage: Message = {
-      id: Date.now(), // ID temporal
-      sender_id: authState.userId!,
-      content: 'Mensaje de audio',
-      content_type: 'audio',
-      created_at: new Date().toISOString(),
-      temp: true,
-      sender: {
-        id: authState.userId!,
-        username: 'Tú'
-      }
-    };
+    // NO crear mensaje temporal aquí
+    // El mensaje llegará por WebSocket después de que el servidor lo procese
+    // Esto elimina el problema de "Mensaje de audio" temporal
     
-    // Agregar mensaje temporal inmediatamente
-    setMessages(prev => [...prev, tempMessage]);
-    
-    // Scroll al final
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    
-    console.log('Audio enviado correctamente - mensaje temporal creado');
+    console.log('Audio enviado correctamente - esperando mensaje real por WebSocket');
   };// Función para conectar WebSocket
   const connectWebSocket = () => {
     if (!authState.token || !id || wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -139,33 +122,31 @@ export default function ConversationScreen() {
       
       try {
         const message: WebSocketMessage = JSON.parse(event.data);
-        console.log('WebSocket mensaje recibido:', message);        switch (message.type) {
-          case 'new_message':
+        console.log('WebSocket mensaje recibido:', message);        switch (message.type) {          case 'new_message':
             if (message.data) {
-              setMessages(prev => {
-                // Si es mi propio mensaje, verificar si hay uno temporal para reemplazar
-                if (message.data.sender_id === authState.userId) {
-                  // Para mensajes de texto
-                  const tempTextIndex = prev.findIndex(m => m.temp && m.content === message.data.content && m.content_type !== 'audio');
-                  if (tempTextIndex !== -1) {
-                    // Reemplazar mensaje temporal de texto con el real
-                    const updated = [...prev];
-                    updated[tempTextIndex] = message.data;
-                    console.log('Mensaje temporal de texto reemplazado con real:', message.data.id);
-                    return updated;
-                  }
-                  
-                  // Para mensajes de audio
-                  const tempAudioIndex = prev.findIndex(m => m.temp && m.content_type === 'audio');
-                  if (tempAudioIndex !== -1 && message.data.content_type === 'audio') {
-                    // Reemplazar mensaje temporal de audio con el real
-                    const updated = [...prev];
-                    updated[tempAudioIndex] = message.data;
-                    console.log('Mensaje temporal de audio reemplazado con real:', message.data.id);
-                    return updated;
-                  }
-                }
+              console.log('🔍 WEBSOCKET DEBUG - Nuevo mensaje recibido:');
+              console.log('🔍 Message data completo:', JSON.stringify(message.data, null, 2));
+              console.log('🔍 content_type:', message.data.content_type);
+              console.log('🔍 media_url:', message.data.media_url);
+              console.log('🔍 sender_id:', message.data.sender_id);
+              console.log('🔍 message id:', message.data.id);
+              
+              // LOGGING ESPECÍFICO PARA AUDIOS
+              if (message.data.content_type === 'audio' && message.data.media_url) {
+                console.log('🎵 AUDIO MESSAGE DEBUG:');
+                console.log('🎵 Raw media_url:', message.data.media_url);
+                console.log('🎵 media_url includes uploads/audio/:', message.data.media_url.includes('uploads/audio/'));
                 
+                // Intentar construir la URL que se va a usar
+                try {
+                  const testUrl = buildAudioUrl(message.data.media_url);
+                  console.log('🎵 URL que se construirá para reproducción:', testUrl);
+                } catch (e) {
+                  console.error('🎵 Error al construir URL:', e);
+                }
+              }
+              
+              setMessages(prev => {
                 // Verificar si el mensaje ya existe para evitar duplicados
                 const exists = prev.find(m => m.id === message.data.id && !m.temp);
                 if (exists) {
@@ -173,7 +154,8 @@ export default function ConversationScreen() {
                   return prev;
                 }
                 
-                // Agregar nuevo mensaje si no es duplicado
+                console.log('✅ Agregando nuevo mensaje a la lista:', message.data.id);
+                // Agregar nuevo mensaje (tanto texto como audio)
                 return [...prev, message.data];
               });
               setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -486,28 +468,36 @@ export default function ConversationScreen() {
         msg.id === messageId 
           ? { ...msg, isLoadingTranslation: false }
           : msg
-      ));
-    }
-  };  // Función helper para construir URL de audio
+      ));    }
+  };
+  // Función helper para construir URL de audio - SIMPLIFICADA
   const buildAudioUrl = (mediaUrl: string): string => {
     console.log('🔍 buildAudioUrl input:', mediaUrl);
     
-    // Si ya es una URL completa, usarla tal como está
-    if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
-      console.log('✅ URL completa detectada:', mediaUrl);
-      return mediaUrl;
+    // Validar que mediaUrl no sea null, undefined o vacío
+    if (!mediaUrl || mediaUrl.trim() === '') {
+      console.error('❌ mediaUrl está vacío o no definido:', mediaUrl);
+      throw new Error('URL de audio no válida: mediaUrl está vacío');
     }
     
-    // Si ya empieza con /api/, agregar solo el dominio
-    if (mediaUrl.startsWith('/api/')) {
-      const fullUrl = `http://localhost:8080${mediaUrl}`;
-      console.log('✅ Path API detectado, URL construida:', fullUrl);
+    const cleanMediaUrl = mediaUrl.trim();
+    
+    // Si ya es una URL completa, usarla tal como está
+    if (cleanMediaUrl.startsWith('http://') || cleanMediaUrl.startsWith('https://')) {
+      console.log('✅ URL completa del backend:', cleanMediaUrl);
+      return cleanMediaUrl;
+    }
+    
+    // Si es un path relativo, agregar el dominio base
+    if (cleanMediaUrl.startsWith('/api/')) {
+      const fullUrl = `http://localhost:8080${cleanMediaUrl}`;
+      console.log('✅ URL construida desde path del backend:', fullUrl);
       return fullUrl;
     }
     
-    // Si es solo un filename, construir la URL completa
-    const fullUrl = `http://localhost:8080/api/v1/audio/message/${mediaUrl}`;
-    console.log('✅ Filename detectado, URL construida:', fullUrl);
+    // Fallback: asumir que es una URL relativa del backend
+    const fullUrl = `http://localhost:8080${cleanMediaUrl.startsWith('/') ? cleanMediaUrl : '/' + cleanMediaUrl}`;
+    console.log('✅ URL construida como fallback:', fullUrl);
     return fullUrl;
   };// Función para reproducir audio
   const playAudio = async (messageId: number, mediaUrl: string) => {
@@ -687,7 +677,19 @@ export default function ConversationScreen() {
                 {item.media_url && !item.temp && (
                   <TouchableOpacity 
                     style={styles.playButton}
-                    onPress={() => playAudio(item.id, item.media_url!)}
+                    onPress={() => {
+                      console.log('🔍 AUDIO DEBUG - Reproductor presionado:');
+                      console.log('🔍 Message ID:', item.id);
+                      console.log('🔍 Message object completo:', JSON.stringify(item, null, 2));
+                      console.log('🔍 media_url value:', item.media_url);
+                      console.log('🔍 media_url type:', typeof item.media_url);
+                      console.log('🔍 content_type:', item.content_type);
+                      console.log('🔍 is temp:', item.temp);
+                      console.log('🔍 created_at:', item.created_at);
+                      console.log('🔍 sender_id:', item.sender_id);
+                      console.log('🔍 calling playAudio...');
+                      playAudio(item.id, item.media_url!);
+                    }}
                   >
                     <Text style={styles.playButtonText}>
                       {playingAudio[item.id] ? '⏸️ Pausar' : '▶️ Reproducir'}
