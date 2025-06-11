@@ -1,9 +1,11 @@
 import AddParticipantModal from '@/components/AddParticipantModal';
+import MessageAudioModal from '@/components/MessageAudioModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { createAuthenticatedAPI } from '@/services/api';
+import { Audio } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 // Actualiza la interfaz Message para incluir sender
 interface Message {
@@ -65,11 +67,17 @@ export default function ConversationScreen() {
   const flatListRef = useRef<FlatList>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
-  const typingTimeoutRef = useRef<number | null>(null);
-  const heartbeatRef = useRef<number | null>(null);
-    // WebSocket state
+  const typingTimeoutRef = useRef<number | null>(null);  const heartbeatRef = useRef<number | null>(null);
+  
+  // WebSocket state
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const maxReconnectAttempts = 5;
+    // Estado para el modal de audio
+  const [showAudioModal, setShowAudioModal] = useState(false);
+  
+  // Estado para reproducción de audio
+  const [playingAudio, setPlayingAudio] = useState<{ [key: number]: boolean }>({});
+  const [audioObjects, setAudioObjects] = useState<{ [key: number]: any }>({});
   // Función para refrescar participantes
   const fetchParticipants = async () => {
     if (!authState.token || !id) return;
@@ -82,11 +90,34 @@ export default function ConversationScreen() {
     } catch (error) {
       console.error('Error al cargar participantes:', error);
     }
-  };
-  // Manejar cuando se agrega un participante
+  };  // Manejar cuando se agrega un participante
   const handleParticipantAdded = () => {
     fetchParticipants(); // Refrescar la lista de participantes
     // También podríamos emitir un evento WebSocket para notificar a otros usuarios
+  };
+  // Manejar cuando se envía un audio
+  const handleAudioSent = () => {
+    // Crear mensaje temporal de audio
+    const tempMessage: Message = {
+      id: Date.now(), // ID temporal
+      sender_id: authState.userId!,
+      content: 'Mensaje de audio',
+      content_type: 'audio',
+      created_at: new Date().toISOString(),
+      temp: true,
+      sender: {
+        id: authState.userId!,
+        username: 'Tú'
+      }
+    };
+    
+    // Agregar mensaje temporal inmediatamente
+    setMessages(prev => [...prev, tempMessage]);
+    
+    // Scroll al final
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    
+    console.log('Audio enviado correctamente - mensaje temporal creado');
   };// Función para conectar WebSocket
   const connectWebSocket = () => {
     if (!authState.token || !id || wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -108,19 +139,29 @@ export default function ConversationScreen() {
       
       try {
         const message: WebSocketMessage = JSON.parse(event.data);
-        console.log('WebSocket mensaje recibido:', message);
-          switch (message.type) {
+        console.log('WebSocket mensaje recibido:', message);        switch (message.type) {
           case 'new_message':
             if (message.data) {
               setMessages(prev => {
                 // Si es mi propio mensaje, verificar si hay uno temporal para reemplazar
                 if (message.data.sender_id === authState.userId) {
-                  const tempIndex = prev.findIndex(m => m.temp && m.content === message.data.content);
-                  if (tempIndex !== -1) {
-                    // Reemplazar mensaje temporal con el real
+                  // Para mensajes de texto
+                  const tempTextIndex = prev.findIndex(m => m.temp && m.content === message.data.content && m.content_type !== 'audio');
+                  if (tempTextIndex !== -1) {
+                    // Reemplazar mensaje temporal de texto con el real
                     const updated = [...prev];
-                    updated[tempIndex] = message.data;
-                    console.log('Mensaje temporal reemplazado con real:', message.data.id);
+                    updated[tempTextIndex] = message.data;
+                    console.log('Mensaje temporal de texto reemplazado con real:', message.data.id);
+                    return updated;
+                  }
+                  
+                  // Para mensajes de audio
+                  const tempAudioIndex = prev.findIndex(m => m.temp && m.content_type === 'audio');
+                  if (tempAudioIndex !== -1 && message.data.content_type === 'audio') {
+                    // Reemplazar mensaje temporal de audio con el real
+                    const updated = [...prev];
+                    updated[tempAudioIndex] = message.data;
+                    console.log('Mensaje temporal de audio reemplazado con real:', message.data.id);
                     return updated;
                   }
                 }
@@ -228,8 +269,7 @@ export default function ConversationScreen() {
       clearInterval(heartbeatRef.current);
       heartbeatRef.current = null;
     }
-  };
-  // Cargar datos iniciales y conectar WebSocket
+  };  // Cargar datos iniciales y conectar WebSocket
   useEffect(() => {
     if (!authState.token || !id) return;
     
@@ -263,11 +303,41 @@ export default function ConversationScreen() {
         setError('Error al cargar la conversación');
         console.log('Error al cargar mensajes:', e);
       })
-      .finally(() => setLoading(false));
-
-    // Cleanup al desmontar
+      .finally(() => setLoading(false));    // Cleanup al desmontar
     return () => {
       disconnectWebSocket();
+      // Pausar y limpiar todos los audios
+      Object.values(audioObjects).forEach(async (sound) => {
+        if (sound) {
+          try {
+            await sound.pauseAsync();
+            await sound.unloadAsync();
+          } catch (e) {
+            console.log('Error cleaning up audio:', e);
+          }
+        }
+      });
+      
+      // Limpiar Blob URLs en web
+      if (Platform.OS === 'web') {
+        // Obtener todas las URIs de audio que puedan ser Blob URLs
+        Object.values(audioObjects).forEach(async (sound) => {
+          if (sound) {
+            try {
+              const status = await sound.getStatusAsync();
+              if (status.uri && status.uri.startsWith('blob:')) {
+                URL.revokeObjectURL(status.uri);
+                console.log('🗑️ Blob URL limpiado en cleanup:', status.uri);
+              }
+            } catch (e) {
+              console.log('Error cleaning up blob URL:', e);
+            }
+          }
+        });
+      }
+      
+      setAudioObjects({});
+      setPlayingAudio({});
     };
   }, [authState.token, id]); // Agregar dependencias correctas
 
@@ -376,7 +446,6 @@ export default function ConversationScreen() {
     const p = participants.find(p => p.user.id === item.sender_id);
     return p ? p.user.username : 'Usuario';
   };
-
   // Función para obtener traducción del mensaje
   const getTranslation = async (messageId: number) => {
     if (!authState.token) return;
@@ -419,9 +488,184 @@ export default function ConversationScreen() {
           : msg
       ));
     }
-  };  const renderItem = ({ item, index }: { item: Message, index: number }) => {
+  };  // Función helper para construir URL de audio
+  const buildAudioUrl = (mediaUrl: string): string => {
+    console.log('🔍 buildAudioUrl input:', mediaUrl);
+    
+    // Si ya es una URL completa, usarla tal como está
+    if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+      console.log('✅ URL completa detectada:', mediaUrl);
+      return mediaUrl;
+    }
+    
+    // Si ya empieza con /api/, agregar solo el dominio
+    if (mediaUrl.startsWith('/api/')) {
+      const fullUrl = `http://localhost:8080${mediaUrl}`;
+      console.log('✅ Path API detectado, URL construida:', fullUrl);
+      return fullUrl;
+    }
+    
+    // Si es solo un filename, construir la URL completa
+    const fullUrl = `http://localhost:8080/api/v1/audio/message/${mediaUrl}`;
+    console.log('✅ Filename detectado, URL construida:', fullUrl);
+    return fullUrl;
+  };// Función para reproducir audio
+  const playAudio = async (messageId: number, mediaUrl: string) => {
+    try {
+      // Si ya está reproduciendo, pausar
+      if (playingAudio[messageId]) {
+        if (audioObjects[messageId]) {
+          await audioObjects[messageId].pauseAsync();
+          setPlayingAudio(prev => ({ ...prev, [messageId]: false }));
+        }
+        return;
+      }
+
+      // Detener otros audios que estén reproduciéndose
+      for (const [id, isPlaying] of Object.entries(playingAudio)) {
+        if (isPlaying && audioObjects[parseInt(id)]) {
+          await audioObjects[parseInt(id)].pauseAsync();
+        }
+      }
+      setPlayingAudio({});
+
+      // Construir la URL completa del audio usando el endpoint GET
+      const audioUrl = buildAudioUrl(mediaUrl);
+      console.log('🔊 Reproduciendo audio desde:', audioUrl);
+      console.log('🔍 Media URL original:', mediaUrl);
+      console.log('🌐 Platform:', Platform.OS);
+
+      // Configurar modo de audio
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+
+      let sound = audioObjects[messageId];
+      
+      if (!sound) {
+        let audioSource: any;
+        
+        if (Platform.OS === 'web') {
+          // Para web: usar Blob URL para evitar problemas de CORS con headers
+          console.log('🌐 Creando Blob URL para web...');
+          try {
+            const response = await fetch(audioUrl, {
+              headers: {
+                'Authorization': `Bearer ${authState.token}`,
+              },
+            });
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const audioBlob = await response.blob();
+            const blobUrl = URL.createObjectURL(audioBlob);
+            
+            console.log('✅ Blob URL creado:', blobUrl);
+            audioSource = { uri: blobUrl };
+              } catch (fetchError) {
+            console.error('❌ Error fetching audio for blob:', fetchError);
+            const errorMessage = fetchError instanceof Error ? fetchError.message : 'Error desconocido';
+            throw new Error(`No se pudo descargar el audio: ${errorMessage}`);
+          }
+        } else {
+          // Para mobile: usar headers de autenticación directamente
+          audioSource = {
+            uri: audioUrl,
+            headers: {
+              'Authorization': `Bearer ${authState.token}`,
+            },
+          };
+        }
+
+        console.log('🎵 Creando objeto de audio...');
+        
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          audioSource,
+          { shouldPlay: false }
+        );
+        sound = newSound;
+        
+        // Configurar callback para cuando termine la reproducción
+        sound.setOnPlaybackStatusUpdate((status: any) => {
+          if (status.didJustFinish) {
+            setPlayingAudio(prev => ({ ...prev, [messageId]: false }));
+            
+            // Limpiar Blob URL si es web
+            if (Platform.OS === 'web' && audioSource.uri && audioSource.uri.startsWith('blob:')) {
+              URL.revokeObjectURL(audioSource.uri);
+              console.log('🗑️ Blob URL limpiado');
+            }
+          }
+        });
+
+        setAudioObjects(prev => ({ ...prev, [messageId]: sound }));
+        
+        // CRÍTICO: Esperar a que el audio se cargue completamente antes de reproducir
+        console.log('🔄 Esperando que el audio se cargue...');
+        let status = await sound.getStatusAsync();
+        
+        // Esperar hasta que el audio esté cargado con timeout
+        let attempts = 0;
+        const maxAttempts = 50; // 5 segundos máximo
+        
+        while ((!status.isLoaded) && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 100)); // Wait 100ms
+          status = await sound.getStatusAsync();
+          attempts++;
+          console.log(`🔄 Intento ${attempts}: Audio loaded = ${status.isLoaded}`);
+        }
+        
+        if (!status.isLoaded) {
+          // Limpiar Blob URL en caso de error
+          if (Platform.OS === 'web' && audioSource.uri && audioSource.uri.startsWith('blob:')) {
+            URL.revokeObjectURL(audioSource.uri);
+          }
+          throw new Error('El audio no se pudo cargar después de 5 segundos');
+        }
+        
+        console.log('✅ Audio cargado exitosamente, procediendo a reproducir');
+      } else {
+        // Si ya existe el sound object, verificar que esté cargado
+        const status = await sound.getStatusAsync();
+        if (!status.isLoaded) {
+          console.log('⚠️ Audio object existente no está cargado, recreando...');
+          // Remover el audio object corrupto
+          setAudioObjects(prev => {
+            const updated = { ...prev };
+            delete updated[messageId];
+            return updated;
+          });
+          
+          // Recursively call playAudio to recreate the sound object
+          return playAudio(messageId, mediaUrl);
+        }
+      }
+
+      // Reproducir audio solo después de confirmar que está cargado
+      console.log('▶️ Iniciando reproducción del audio');
+      await sound.playAsync();
+      setPlayingAudio(prev => ({ ...prev, [messageId]: true }));
+
+    } catch (error) {
+      console.error('❌ Error reproduciendo audio:', error);
+      console.error('Error details:', error);
+      
+      // Limpiar el objeto de audio problemático
+      setAudioObjects(prev => {
+        const updated = { ...prev };
+        delete updated[messageId];
+        return updated;
+      });
+        Alert.alert('Error', `No se pudo reproducir el audio: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      setPlayingAudio(prev => ({ ...prev, [messageId]: false }));
+    }
+  };const renderItem = ({ item, index }: { item: Message, index: number }) => {
     const isMe = item.sender_id === authState.userId;
     const showUsername = !isMe && (index === 0 || messages[index-1]?.sender_id !== item.sender_id);
+    const isAudioMessage = item.content_type === 'audio';
     
     return (
       <View style={[styles.messageContainer, isMe ? styles.meContainer : styles.otherContainer]}>
@@ -432,14 +676,36 @@ export default function ConversationScreen() {
           <View style={[
             styles.bubble, 
             isMe ? styles.meBubble : styles.otherBubble,
-            item.temp && styles.tempMessage
-          ]}>
-            <Text style={[styles.messageText, item.temp && styles.tempText]}>
-              {item.content || '[Sin texto]'}
-            </Text>
+            item.temp && styles.tempMessage,
+            isAudioMessage && styles.audioBubble
+          ]}>            {isAudioMessage ? (
+              <View style={styles.audioMessageContainer}>
+                <Text style={styles.audioIcon}>🎵</Text>
+                <Text style={[styles.messageText, { fontStyle: 'italic' }]}>
+                  Mensaje de audio
+                </Text>
+                {item.media_url && !item.temp && (
+                  <TouchableOpacity 
+                    style={styles.playButton}
+                    onPress={() => playAudio(item.id, item.media_url!)}
+                  >
+                    <Text style={styles.playButtonText}>
+                      {playingAudio[item.id] ? '⏸️ Pausar' : '▶️ Reproducir'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {item.temp && (
+                  <Text style={styles.sendingIndicator}>Enviando...</Text>
+                )}
+              </View>
+            ) : (
+              <Text style={[styles.messageText, item.temp && styles.tempText]}>
+                {item.content || '[Sin texto]'}
+              </Text>
+            )}
             
-            {/* Botón de traducir - solo para mensajes reales (no temporales) */}
-            {!item.temp && (
+            {/* Botón de traducir - solo para mensajes reales (no temporales) y no de audio */}
+            {!item.temp && !isAudioMessage && (
               <View style={styles.translationSection}>
                 {!item.translatedContent && !item.isLoadingTranslation && (
                   <TouchableOpacity 
@@ -503,6 +769,15 @@ export default function ConversationScreen() {
         conversationId={id as string}
       />
 
+      {/* Modal para enviar audio */}
+      <MessageAudioModal
+        visible={showAudioModal}
+        onClose={() => setShowAudioModal(false)}
+        onAudioSent={handleAudioSent}
+        token={authState.token || ''}
+        conversationId={id as string}
+      />
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
           <Text style={{ color: '#273c75', fontSize: 18 }}>← Volver</Text>
@@ -544,8 +819,7 @@ export default function ConversationScreen() {
           />
           {renderTypingIndicator()}
         </>
-      )}
-      <View style={styles.inputRow}>
+      )}      <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
           value={input}
@@ -555,6 +829,13 @@ export default function ConversationScreen() {
           onSubmitEditing={handleSend}
           onBlur={() => sendTypingStatus(false)}
         />
+        <TouchableOpacity 
+          style={styles.audioBtn} 
+          onPress={() => setShowAudioModal(true)}
+          disabled={sending}
+        >
+          <Text style={{ color: '#273c75', fontSize: 18 }}>🎤</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={sending || !input.trim()}>
           <Text style={{ color: '#fff', fontSize: 18 }}>💬</Text>
         </TouchableOpacity>
@@ -719,14 +1000,22 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
-  },
-  inputRow: {
+  },  inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 10,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderColor: '#e1e4ed',
+  },  audioBtn: {
+    backgroundColor: '#f1f2f6',
+    borderRadius: 50,
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#dcdde1',
   },
   input: {
     flex: 1,
@@ -735,10 +1024,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     fontSize: 16,
-    marginRight: 8,
     borderWidth: 1,
     borderColor: '#dcdde1',
-  },  sendBtn: {
+  },sendBtn: {
     backgroundColor: '#273c75',
     borderRadius: 50,
     padding: 10,
@@ -774,5 +1062,29 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     padding: 8,
     borderRadius: 4,
+  },
+  audioBubble: {
+    minWidth: 150,
+  },
+  audioMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  audioIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  playButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  playButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
