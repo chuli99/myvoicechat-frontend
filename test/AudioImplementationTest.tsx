@@ -2,11 +2,11 @@
 // Este archivo permite verificar que todos los imports estén correctos
 
 import React from 'react';
-import { View, Text } from 'react-native';
+import { Text, View } from 'react-native';
 
 // Verificar imports principales
-import MessageAudioModal from '../components/MessageAudioModal';
 import AddParticipantModal from '../components/AddParticipantModal';
+import MessageAudioModal from '../components/MessageAudioModal';
 import ReferenceAudioModal from '../components/ReferenceAudioModal';
 
 // Test component para verificar que no hay errores de sintaxis
