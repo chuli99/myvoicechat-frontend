@@ -5,7 +5,7 @@ import { createAuthenticatedAPI } from '@/services/api';
 import { Audio } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 // Actualiza la interfaz Message para incluir sender
 interface Message {
@@ -670,9 +670,12 @@ export default function ConversationScreen() {
             isAudioMessage && styles.audioBubble
           ]}>            {isAudioMessage ? (
               <View style={styles.audioMessageContainer}>
-                <Text style={styles.audioIcon}>🎵</Text>
+                <Image 
+                  source={require('../img/icons/audio_icon.png')} 
+                  style={{ width: 25, height: 25, marginRight: 8 }}
+                />
                 <Text style={[styles.messageText, { fontStyle: 'italic' }]}>
-                  Mensaje de audio
+                  Audio
                 </Text>
                 {item.media_url && !item.temp && (
                   <TouchableOpacity 
@@ -689,11 +692,17 @@ export default function ConversationScreen() {
                       console.log('🔍 sender_id:', item.sender_id);
                       console.log('🔍 calling playAudio...');
                       playAudio(item.id, item.media_url!);
-                    }}
-                  >
-                    <Text style={styles.playButtonText}>
-                      {playingAudio[item.id] ? '⏸️ Pausar' : '▶️ Reproducir'}
-                    </Text>
+                    }}                  >
+                    {playingAudio[item.id] ? (
+                      <Text style={styles.playButtonText}>⏸️ Pausar</Text>
+                    ) : (
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Image 
+                          source={require('../img/icons/play_icon.png')} 
+                          style={{width: 25, height: 25, marginRight: 8  }}
+                        />
+                      </View>
+                    )}
                   </TouchableOpacity>
                 )}
                 {item.temp && (
@@ -830,16 +839,20 @@ export default function ConversationScreen() {
           editable={!sending}
           onSubmitEditing={handleSend}
           onBlur={() => sendTypingStatus(false)}
-        />
-        <TouchableOpacity 
+        />        <TouchableOpacity 
           style={styles.audioBtn} 
           onPress={() => setShowAudioModal(true)}
           disabled={sending}
         >
-          <Text style={{ color: '#273c75', fontSize: 18 }}>🎤</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={sending || !input.trim()}>
-          <Text style={{ color: '#fff', fontSize: 18 }}>💬</Text>
+          <Image 
+            source={require('../img/icons/micro_icon.png')} 
+            style={{ width: 30, height: 30, marginRight: 8 }}
+          />
+        </TouchableOpacity>        <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={sending || !input.trim()}>
+          <Image 
+            source={require('../img/icons/msg_icon.png')} 
+            style={{ width: 30, height: 30, marginRight: 8 }}
+          />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -1029,11 +1042,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#dcdde1',
   },sendBtn: {
-    backgroundColor: '#273c75',
+  
+    backgroundColor: '#f1f2f6',
     borderRadius: 50,
     padding: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    marginHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#dcdde1',
   },
   translationSection: {
     marginTop: 8,
