@@ -28,6 +28,9 @@ interface Message {
   };
   translatedContent?: string; // Contenido traducido cacheado
   isLoadingTranslation?: boolean; // Estado de carga de traducción
+  // Propiedades para audio traducido
+  translatedAudioUrl?: string; // URL del audio traducido cacheado
+  isLoadingAudioTranslation?: boolean; // Estado de carga de traducción de audio
 }
 
 // Tipos de mensajes WebSocket
@@ -74,10 +77,9 @@ export default function ConversationScreen() {
   const maxReconnectAttempts = 5;
     // Estado para el modal de audio
   const [showAudioModal, setShowAudioModal] = useState(false);
-  
-  // Estado para reproducción de audio
-  const [playingAudio, setPlayingAudio] = useState<{ [key: number]: boolean }>({});
-  const [audioObjects, setAudioObjects] = useState<{ [key: number]: any }>({});
+    // Estado para reproducción de audio
+  const [playingAudio, setPlayingAudio] = useState<{ [key: string]: boolean }>({});
+  const [audioObjects, setAudioObjects] = useState<{ [key: string]: any }>({});
   // Función para refrescar participantes
   const fetchParticipants = async () => {
     if (!authState.token || !id) return;
@@ -288,7 +290,7 @@ export default function ConversationScreen() {
       .finally(() => setLoading(false));    // Cleanup al desmontar
     return () => {
       disconnectWebSocket();
-      // Pausar y limpiar todos los audios
+      // Pausar y limpiar todos los audios (incluidos los traducidos)
       Object.values(audioObjects).forEach(async (sound) => {
         if (sound) {
           try {
@@ -300,9 +302,8 @@ export default function ConversationScreen() {
         }
       });
       
-      // Limpiar Blob URLs en web
+      // Limpiar Blob URLs en web (incluidos los de audios traducidos)
       if (Platform.OS === 'web') {
-        // Obtener todas las URIs de audio que puedan ser Blob URLs
         Object.values(audioObjects).forEach(async (sound) => {
           if (sound) {
             try {
@@ -469,6 +470,108 @@ export default function ConversationScreen() {
           ? { ...msg, isLoadingTranslation: false }
           : msg
       ));    }
+  };  // Función para obtener traducción de audio
+  const getAudioTranslation = async (messageId: number) => {
+    console.log('🎵 INICIANDO TRADUCCIÓN DE AUDIO');
+    console.log('🎵 Message ID:', messageId);
+    console.log('🎵 Auth token available:', !!authState.token);
+    
+    if (!authState.token) {
+      console.error('❌ No hay token de autenticación');
+      return;
+    }
+
+    try {      // Marcar como cargando
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId 
+          ? { ...msg, isLoadingAudioTranslation: true }
+          : msg
+      ));      const response = await fetch(`http://localhost:8080/api/v1/translations/message/${messageId}`, {
+        headers: {
+          'Authorization': `Bearer ${authState.token}`
+        }
+      });
+
+      console.log('🔍 AUDIO TRANSLATION DEBUG - Response status:', response.status);
+      console.log('🔍 AUDIO TRANSLATION DEBUG - Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🔍 AUDIO TRANSLATION DEBUG - Respuesta completa del backend:');
+        console.log('🔍 Raw response data:', JSON.stringify(data, null, 2));
+        console.log('🔍 Tipo de data:', typeof data);
+        console.log('🔍 Propiedades de data:', Object.keys(data));
+        
+        if (data.translated_message) {
+          console.log('🔍 translated_message encontrado:', JSON.stringify(data.translated_message, null, 2));
+          console.log('🔍 translated_message.content_type:', data.translated_message.content_type);
+          console.log('🔍 translated_message.media_url:', data.translated_message.media_url);
+        } else {
+          console.log('❌ No se encontró translated_message en la respuesta');
+        }        
+        // Verificar que la respuesta tenga el audio traducido
+        if (data && data.content_type === 'AUDIO' && data.media_url) {
+          console.log('✅ Respuesta de audio traducido válida encontrada');
+          
+          // Extraer el filename del media_url para construir la URL de descarga
+          const mediaUrl = data.media_url;
+          console.log('🔍 Media URL del audio traducido:', mediaUrl);
+          
+          // El filename es lo que está después de "translated/" en la URL
+          const filename = mediaUrl.split('/api/v1/audio/translated/')[1];
+          console.log('🔍 Filename extraído:', filename);
+          
+          if (filename) {
+            const translatedAudioUrl = `http://localhost:8080/api/v1/audio/translated/${filename}`;
+            console.log('🔍 URL final construida para descarga:', translatedAudioUrl);
+            
+            // Actualizar el mensaje con la URL del audio traducido
+            setMessages(prev => prev.map(msg => 
+              msg.id === messageId 
+                ? { 
+                    ...msg, 
+                    translatedAudioUrl,
+                    isLoadingAudioTranslation: false 
+                  }
+                : msg
+            ));
+            
+            console.log('✅ Estado actualizado con URL de audio traducido');
+          } else {
+            console.error('❌ No se pudo extraer el filename del media_url:', mediaUrl);
+            throw new Error('No se pudo extraer el filename del audio traducido');
+          }
+        } else {
+          console.error('❌ Respuesta no válida para audio traducido:');
+          console.error('❌ content_type:', data?.content_type);
+          console.error('❌ media_url:', data?.media_url);
+          console.error('❌ Estructura completa recibida:', data);
+          throw new Error('No se encontró audio traducido válido en la respuesta');
+        }} else {
+        console.error('❌ Response no OK. Status:', response.status);
+        console.error('❌ Response statusText:', response.statusText);
+        
+        // Intentar leer el contenido del error si es posible
+        try {
+          const errorText = await response.text();
+          console.error('❌ Response body:', errorText);
+        } catch (e) {
+          console.error('❌ No se pudo leer el body de la respuesta de error');
+        }
+        
+        throw new Error(`Error al obtener traducción de audio: ${response.status} ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('❌ ERROR COMPLETO en getAudioTranslation:', error);
+      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack available');
+      // Quitar estado de carga en caso de error
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId 
+          ? { ...msg, isLoadingAudioTranslation: false }
+          : msg
+      ));
+      Alert.alert('Error', 'No se pudo obtener la traducción del audio');
+    }
   };
   // Función helper para construir URL de audio - SIMPLIFICADA
   const buildAudioUrl = (mediaUrl: string): string => {
@@ -652,7 +755,162 @@ export default function ConversationScreen() {
         Alert.alert('Error', `No se pudo reproducir el audio: ${error instanceof Error ? error.message : 'Error desconocido'}`);
       setPlayingAudio(prev => ({ ...prev, [messageId]: false }));
     }
-  };const renderItem = ({ item, index }: { item: Message, index: number }) => {
+  };
+
+  // Función para reproducir audio traducido
+  const playTranslatedAudio = async (messageId: number, translatedAudioUrl: string) => {
+    try {
+      // Si ya está reproduciendo, pausar
+      if (playingAudio[`translated_${messageId}`]) {
+        if (audioObjects[`translated_${messageId}`]) {
+          await audioObjects[`translated_${messageId}`].pauseAsync();
+          setPlayingAudio(prev => ({ ...prev, [`translated_${messageId}`]: false }));
+        }
+        return;
+      }
+
+      // Detener otros audios que estén reproduciéndose
+      for (const [id, isPlaying] of Object.entries(playingAudio)) {
+        if (isPlaying && (audioObjects[parseInt(id)] || audioObjects[id])) {
+          const audioKey = isNaN(parseInt(id)) ? id : parseInt(id);
+          if (audioObjects[audioKey]) {
+            await audioObjects[audioKey].pauseAsync();
+          }
+        }
+      }
+      setPlayingAudio({});
+
+      console.log('🔊 Reproduciendo audio traducido desde:', translatedAudioUrl);
+
+      // Configurar modo de audio
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+
+      let sound = audioObjects[`translated_${messageId}`];
+      
+      if (!sound) {
+        let audioSource: any;
+        
+        if (Platform.OS === 'web') {
+          // Para web: usar Blob URL para evitar problemas de CORS con headers
+          console.log('🌐 Creando Blob URL para audio traducido en web...');
+          try {
+            const response = await fetch(translatedAudioUrl, {
+              headers: {
+                'Authorization': `Bearer ${authState.token}`,
+              },
+            });
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const audioBlob = await response.blob();
+            const blobUrl = URL.createObjectURL(audioBlob);
+            
+            console.log('✅ Blob URL creado para audio traducido:', blobUrl);
+            audioSource = { uri: blobUrl };
+          } catch (fetchError) {
+            console.error('❌ Error fetching translated audio for blob:', fetchError);
+            const errorMessage = fetchError instanceof Error ? fetchError.message : 'Error desconocido';
+            throw new Error(`No se pudo descargar el audio traducido: ${errorMessage}`);
+          }
+        } else {
+          // Para mobile: usar headers de autenticación directamente
+          audioSource = {
+            uri: translatedAudioUrl,
+            headers: {
+              'Authorization': `Bearer ${authState.token}`,
+            },
+          };
+        }
+
+        console.log('🎵 Creando objeto de audio traducido...');
+        
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          audioSource,
+          { shouldPlay: false }
+        );
+        sound = newSound;
+        
+        // Configurar callback para cuando termine la reproducción
+        sound.setOnPlaybackStatusUpdate((status: any) => {
+          if (status.didJustFinish) {
+            setPlayingAudio(prev => ({ ...prev, [`translated_${messageId}`]: false }));
+            
+            // Limpiar Blob URL si es web
+            if (Platform.OS === 'web' && audioSource.uri && audioSource.uri.startsWith('blob:')) {
+              URL.revokeObjectURL(audioSource.uri);
+              console.log('🗑️ Blob URL del audio traducido limpiado');
+            }
+          }
+        });
+
+        setAudioObjects(prev => ({ ...prev, [`translated_${messageId}`]: sound }));
+        
+        // Esperar a que el audio se cargue completamente antes de reproducir
+        console.log('🔄 Esperando que el audio traducido se cargue...');
+        let status = await sound.getStatusAsync();
+        
+        let attempts = 0;
+        const maxAttempts = 50; // 5 segundos máximo
+        
+        while ((!status.isLoaded) && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          status = await sound.getStatusAsync();
+          attempts++;
+          console.log(`🔄 Intento ${attempts}: Audio traducido loaded = ${status.isLoaded}`);
+        }
+        
+        if (!status.isLoaded) {
+          // Limpiar Blob URL en caso de error
+          if (Platform.OS === 'web' && audioSource.uri && audioSource.uri.startsWith('blob:')) {
+            URL.revokeObjectURL(audioSource.uri);
+          }
+          throw new Error('El audio traducido no se pudo cargar después de 5 segundos');
+        }
+        
+        console.log('✅ Audio traducido cargado exitosamente, procediendo a reproducir');
+      } else {
+        // Si ya existe el sound object, verificar que esté cargado
+        const status = await sound.getStatusAsync();
+        if (!status.isLoaded) {
+          console.log('⚠️ Audio traducido existente no está cargado, recreando...');
+          // Remover el audio object corrupto
+          setAudioObjects(prev => {
+            const updated = { ...prev };
+            delete updated[`translated_${messageId}`];
+            return updated;
+          });
+          
+          // Recursively call playTranslatedAudio to recreate the sound object
+          return playTranslatedAudio(messageId, translatedAudioUrl);
+        }
+      }
+
+      // Reproducir audio solo después de confirmar que está cargado
+      console.log('▶️ Iniciando reproducción del audio traducido');
+      await sound.playAsync();
+      setPlayingAudio(prev => ({ ...prev, [`translated_${messageId}`]: true }));
+
+    } catch (error) {
+      console.error('❌ Error reproduciendo audio traducido:', error);
+      
+      // Limpiar el objeto de audio problemático
+      setAudioObjects(prev => {
+        const updated = { ...prev };
+        delete updated[`translated_${messageId}`];
+        return updated;
+      });
+      
+      Alert.alert('Error', `No se pudo reproducir el audio traducido: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      setPlayingAudio(prev => ({ ...prev, [`translated_${messageId}`]: false }));
+    }
+  };
+
+  const renderItem = ({ item, index }: { item: Message, index: number }) => {
     const isMe = item.sender_id === authState.userId;
     const showUsername = !isMe && (index === 0 || messages[index-1]?.sender_id !== item.sender_id);
     const isAudioMessage = item.content_type === 'audio';
@@ -714,8 +972,7 @@ export default function ConversationScreen() {
                 {item.content || '[Sin texto]'}
               </Text>
             )}
-            
-            {/* Botón de traducir - solo para mensajes reales (no temporales) y no de audio */}
+              {/* Botón de traducir - para texto */}
             {!item.temp && !isAudioMessage && (
               <View style={styles.translationSection}>
                 {!item.translatedContent && !item.isLoadingTranslation && (
@@ -735,6 +992,52 @@ export default function ConversationScreen() {
                   <Text style={styles.translatedText}>
                     {item.translatedContent}
                   </Text>
+                )}
+              </View>
+            )}
+
+            {/* Sección de traducción de audio */}
+            {!item.temp && isAudioMessage && (
+              <View style={styles.translationSection}>
+                {!item.translatedAudioUrl && !item.isLoadingAudioTranslation && (
+                  <TouchableOpacity 
+                    onPress={() => getAudioTranslation(item.id)}
+                    style={styles.translateButton}
+                  >
+                    <Text style={styles.translateText}>Traducir Audio</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {item.isLoadingAudioTranslation && (
+                  <Text style={styles.loadingTranslation}>Traduciendo audio...</Text>
+                )}
+                
+                {item.translatedAudioUrl && (
+                  <View style={styles.translatedAudioContainer}>
+                    <View style={styles.translatedAudioHeader}>
+                      <Image 
+                        source={require('../img/icons/audio_icon.png')} 
+                        style={{ width: 20, height: 20, marginRight: 6 }}
+                      />
+                      <Text style={styles.translatedAudioLabel}>Audio traducido:</Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.translatedPlayButton}
+                      onPress={() => playTranslatedAudio(item.id, item.translatedAudioUrl!)}
+                    >
+                      {playingAudio[`translated_${item.id}`] ? (
+                        <Text style={styles.playButtonText}>⏸️ Pausar</Text>
+                      ) : (
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Image 
+                            source={require('../img/icons/play_icon.png')} 
+                            style={{width: 20, height: 20, marginRight: 6}}
+                          />
+                          <Text style={styles.playButtonText}>Reproducir</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
             )}
@@ -779,8 +1082,7 @@ export default function ConversationScreen() {
         token={authState.token || ''}
         conversationId={id as string}
       />
-
-      {/* Modal para enviar audio */}
+{/* Modal para enviar audio */}
       <MessageAudioModal
         visible={showAudioModal}
         onClose={() => setShowAudioModal(false)}
@@ -1105,5 +1407,32 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  translatedAudioContainer: {
+    marginTop: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  translatedAudioHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  translatedAudioLabel: {
+    color: '#E8F4FD',
+    fontSize: 12,
+    fontStyle: 'italic',
+    fontWeight: '500',
+  },
+  translatedPlayButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });
