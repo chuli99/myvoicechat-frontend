@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import CreateConversationModal from '@/components/CreateConversationModal';
-import JoinConversationModal from '@/components/JoinConversationModal';
 import ReferenceAudioModal from '@/components/ReferenceAudioModal';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -18,10 +17,8 @@ export default function HomeScreen() {
   const tintColor = Colors[colorScheme ?? 'light'].tint;
   const router = useRouter();  const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showAudioModal, setShowAudioModal] = useState(false);
+  const [error, setError] = useState<string | null>(null);  const [showAudioModal, setShowAudioModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showJoinModal, setShowJoinModal] = useState(false);
 
   const fetchConversations = async () => {
     if (!authState.token) return;
@@ -75,11 +72,6 @@ export default function HomeScreen() {
   const handleShowCreateModal = () => {
     setShowCreateModal(true);
   };
-
-  const handleShowJoinModal = () => {
-    setShowJoinModal(true);
-  };
-
   const handleConversationCreatedOrJoined = () => {
     // Refrescar la lista de conversaciones
     fetchConversations();
@@ -154,17 +146,7 @@ export default function HomeScreen() {
       <CreateConversationModal
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onConversationCreated={handleConversationCreatedOrJoined}
-        token={authState.token || ''}
-      />
-
-      {/* Modal para unirse a conversación */}
-      <JoinConversationModal
-        visible={showJoinModal}
-        onClose={() => setShowJoinModal(false)}
-        onConversationJoined={handleConversationCreatedOrJoined}
-        token={authState.token || ''}
-        userId={authState.userId || 0}
+        onConversationCreated={handleConversationCreatedOrJoined}        token={authState.token || ''}
       />
 
       {/* Header MyVoice Chat */}
@@ -196,14 +178,6 @@ export default function HomeScreen() {
               disabled={loading}
             >
               <Text style={styles.createButtonText}>+ Crear</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.joinButton} 
-              onPress={handleShowJoinModal}
-              disabled={loading}
-            >
-              <Text style={styles.joinButtonText}>🔗 Unirse</Text>
             </TouchableOpacity>
           </View>
         </ThemedView>
@@ -307,19 +281,7 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     color: 'white',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  joinButton: {
-    backgroundColor: '#44bd32',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-  },
-  joinButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 12,
+    fontWeight: 'bold',    fontSize: 12,
   },
 });
 

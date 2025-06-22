@@ -68,11 +68,10 @@ export default function WelcomeScreen() {
             style={styles.secondaryButton}
           />
         </ThemedView>
-        
-        <ThemedText style={styles.footerText}>
+          <ThemedText style={styles.footerText}>
           © 2025 MyVoiceChat - All rights reserved
         </ThemedText>
-      //</ThemedView>
+      </ThemedView>
     
   );
 }
