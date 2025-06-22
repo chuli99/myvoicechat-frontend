@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Image } from 'react-native';
 
 import { ThemedButton } from '@/components/ThemedButton';
 import { ThemedText } from '@/components/ThemedText';
@@ -20,10 +20,13 @@ export default function WelcomeScreen() {
     router.replace('/register');
   };  return (
     <ThemedView style={styles.container}>
-      
-      {/* Header */}
+        {/* Header */}
       <ThemedView style={styles.header}>
-        <ThemedText style={styles.headerTitle}>MyVoice Chat</ThemedText>
+        <Image 
+          source={require('../img/icons/logo.png')} 
+          style={styles.headerLogo} 
+          resizeMode="contain"
+        />
       </ThemedView>
       
       
@@ -81,32 +84,35 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
-  },  header: {
+    padding: 20,  },  header: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    alignItems: 'center',
-    paddingTop: 50,
-    paddingBottom: 15,
-    paddingHorizontal: 20,
+    alignItems: 'flex-start',
+    paddingTop: 45,
+    paddingBottom: 10,
+    paddingHorizontal: 15,
     zIndex: 10,
     backgroundColor: '#273c75',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    elevation: 5,
-  },  headerTitle: {
+    elevation: 5,  },headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
-  },  content: {
+  },  headerLogo: {
+    width: 55,
+    height: 55,
+    maxWidth: '15%',
+    maxHeight: 55,
+  },content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 120, // Para hacer espacio para el header más grande
+    marginTop: 100, // Reducido para hacer espacio para el header más compacto
     width: '100%',
   },
   logo: {

@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { StyleSheet, TouchableOpacity, Image, KeyboardAvoidingView, Platform, ScrollView, Modal, FlatList } from 'react-native';
 import { Link, Stack } from 'expo-router';
+import React, { useState } from 'react';
+import { FlatList, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 
+import { ErrorMessage } from '@/components/ErrorMessage';
+import { ThemedButton } from '@/components/ThemedButton';
+import { ThemedInput } from '@/components/ThemedInput';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { ThemedInput } from '@/components/ThemedInput';
-import { ThemedButton } from '@/components/ThemedButton';
-import { ErrorMessage } from '@/components/ErrorMessage';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -91,9 +91,8 @@ export default function RegisterScreen() {
     >
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <Stack.Screen options={{ title: 'Register', headerShown: false }} />
-        <ThemedView style={styles.container}>
-          <Image 
-            source={require('../assets/images/react-logo.png')} 
+        <ThemedView style={styles.container}>          <Image 
+            source={require('../img/icons/logo.png')} 
             style={styles.logo} 
             resizeMode="contain"
           />
@@ -209,10 +208,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-  },
-  logo: {
-    width: 100,
-    height: 100,
+  },  logo: {
+    width: 300,
+    height: 300,
     marginBottom: 30,
   },
   title: {

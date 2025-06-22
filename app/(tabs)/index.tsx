@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
 
 import CreateConversationModal from '@/components/CreateConversationModal';
 import ReferenceAudioModal from '@/components/ReferenceAudioModal';
@@ -147,11 +147,15 @@ export default function HomeScreen() {
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onConversationCreated={handleConversationCreatedOrJoined}        token={authState.token || ''}
-      />
-
-      {/* Header MyVoice Chat */}
+      />      {/* Header MyVoice Chat */}
       <ThemedView style={styles.header}>
-        <ThemedText style={styles.headerTitle}>MyVoice Chat</ThemedText>
+        <View style={styles.headerLeft}>
+          <Image 
+            source={require('../../img/icons/logo.png')} 
+            style={styles.headerLogo} 
+            resizeMode="contain"
+          />
+        </View>
         <View style={styles.headerButtons}>
           {/* Botón para subir audio de referencia */}          <TouchableOpacity 
             style={styles.audioButton} 
@@ -224,11 +228,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
-  },
-  headerTitle: {
+  },  headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
+  },  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },  headerLogo: {
+    width: 150,
+    height: 150,
+    maxWidth: 150,
+    maxHeight: 150,
   },
   content: {
     flex: 1,

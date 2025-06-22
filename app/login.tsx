@@ -63,14 +63,11 @@ export default function LoginScreen() {
     >
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <Stack.Screen options={{ title: 'Login', headerShown: false }} />
-        <ThemedView style={styles.container}>
-          <Image 
-            source={require('../assets/images/react-logo.png')} 
+        <ThemedView style={styles.container}>          <Image 
+            source={require('../img/icons/logo.png')} 
             style={styles.logo} 
             resizeMode="contain"
           />
-            <ThemedText style={styles.title} type="title">MyVoice Chat</ThemedText>
-          <ThemedText style={styles.subtitle} type="subtitle">Iniciar sesión para continuar</ThemedText>
           
           <ErrorMessage
             error={displayError}
@@ -120,10 +117,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-  },
-  logo: {
-    width: 100,
-    height: 100,
+  },  logo: {
+    width: 300,
+    height: 300,
     marginBottom: 40,
   },
   title: {
