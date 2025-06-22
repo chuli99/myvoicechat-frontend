@@ -30,7 +30,6 @@ export default function MessageAudioModal({
   onAudioSent 
 }: MessageAudioModalProps) {
   const [selectedAudio, setSelectedAudio] = useState<any>(null);
-  const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
@@ -107,14 +106,23 @@ export default function MessageAudioModal({
     setRecordingUri(uri);
     setSelectedAudio(null); // Clear any selected file
   };
-
   const handleSendAudio = async () => {
     if (!selectedAudio && !recordingUri) {
       Alert.alert('Error', 'Por favor selecciona un archivo de audio o graba uno primero');
       return;
     }
 
-    setUploading(true);
+    // CERRAR MODAL INMEDIATAMENTE antes de enviar
+    onClose();
+    
+    // Notificar que se inició el envío del audio (para mostrar mensaje optimista)
+    onAudioSent();    // Limpiar estado del modal
+    const audioToSend = selectedAudio;
+    const recordingToSend = recordingUri;
+    setSelectedAudio(null);
+    setRecordingUri(null);
+    
+    // PROCESAR ENVÍO EN SEGUNDO PLANO
     try {
       const formData = new FormData();
       
@@ -122,11 +130,11 @@ export default function MessageAudioModal({
       formData.append('conversation_id', conversationId);
       formData.append('content_type', 'audio');
       
-      if (recordingUri) {
+      if (recordingToSend) {
         if (Platform.OS === 'web') {
           // Para web, necesitamos crear un Blob desde el URI
           try {
-            const response = await fetch(recordingUri);
+            const response = await fetch(recordingToSend);
             const blob = await response.blob();
             formData.append('audio_file', blob, 'message_audio_recorded.m4a');
           } catch (blobError) {
@@ -137,28 +145,28 @@ export default function MessageAudioModal({
         } else {
           // React Native nativo
           formData.append('audio_file', {
-            uri: recordingUri,
+            uri: recordingToSend,
             type: 'audio/m4a',
             name: 'message_audio_recorded.m4a',
           } as any);
         }
-      } else if (selectedAudio) {
+      } else if (audioToSend) {
         // Validar que sea un archivo de audio
-        if (selectedAudio.mimeType && !selectedAudio.mimeType.startsWith('audio/')) {
+        if (audioToSend.mimeType && !audioToSend.mimeType.startsWith('audio/')) {
           Alert.alert('Error', 'Por favor selecciona un archivo de audio válido');
           return;
         }
         
         if (Platform.OS === 'web') {
-          // Para web, el selectedAudio ya debería ser un File object
-          if (selectedAudio.file) {
-            formData.append('audio_file', selectedAudio.file, selectedAudio.name || 'message_audio.mp3');
+          // Para web, el audioToSend ya debería ser un File object
+          if (audioToSend.file) {
+            formData.append('audio_file', audioToSend.file, audioToSend.name || 'message_audio.mp3');
           } else {
             // Fallback: crear blob desde URI
             try {
-              const response = await fetch(selectedAudio.uri);
+              const response = await fetch(audioToSend.uri);
               const blob = await response.blob();
-              formData.append('audio_file', blob, selectedAudio.name || 'message_audio.mp3');
+              formData.append('audio_file', blob, audioToSend.name || 'message_audio.mp3');
             } catch (blobError) {
               console.error('Error creating blob from selected file:', blobError);
               Alert.alert('Error', 'No se pudo procesar el archivo seleccionado');
@@ -168,12 +176,14 @@ export default function MessageAudioModal({
         } else {
           // React Native nativo
           formData.append('audio_file', {
-            uri: selectedAudio.uri,
-            type: selectedAudio.mimeType || 'audio/mpeg',
-            name: selectedAudio.name || 'message_audio.mp3',
+            uri: audioToSend.uri,
+            type: audioToSend.mimeType || 'audio/mpeg',
+            name: audioToSend.name || 'message_audio.mp3',
           } as any);
         }
-      }      console.log('🔍 Enviando FormData de audio de mensaje con:');
+      }
+
+      console.log('🔍 Enviando FormData de audio de mensaje en segundo plano con:');
       console.log('Platform:', Platform.OS);
       console.log('Token:', token ? 'Presente' : 'Faltante');
       console.log('Conversation ID:', conversationId);
@@ -208,31 +218,16 @@ export default function MessageAudioModal({
 
       const result = await response.json();
       console.log('✅ Audio message upload successful:', result);
-
-      // Cerrar el modal inmediatamente después del éxito
-      onClose();
       
-      // Notificar que se envió el audio
-      onAudioSent();
-
-      // Limpiar estado
-      setSelectedAudio(null);
-      setRecordingUri(null);
-
-      // Mostrar mensaje de éxito después de cerrar el modal
-      Alert.alert(
-        'Éxito', 
-        'Audio enviado correctamente'
-      );
+      // Mostrar notificación de éxito silenciosa (opcional)
+      console.log('Audio enviado correctamente al servidor');
       
     } catch (error: any) {
       console.error('❌ Error uploading audio message:', error);
       Alert.alert(
         'Error', 
-        error.message || 'Error al enviar el audio'
+        `No se pudo enviar el audio: ${error.message || 'Error desconocido'}`
       );
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -244,12 +239,10 @@ export default function MessageAudioModal({
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <ThemedView style={styles.modalContainer}>
-          {/* Botón de cerrar */}
+        <ThemedView style={styles.modalContainer}>          {/* Botón de cerrar */}
           <TouchableOpacity 
             style={styles.closeButton} 
             onPress={onClose}
-            disabled={uploading}
           >
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
@@ -267,11 +260,9 @@ export default function MessageAudioModal({
           </ThemedText>
 
           {/* Recording Section */}
-          <View style={styles.recordingSection}>
-            <TouchableOpacity 
+          <View style={styles.recordingSection}>            <TouchableOpacity 
               style={[styles.recordButton, isRecording && styles.recordingActive]} 
               onPress={isRecording ? stopRecording : startRecording}
-              disabled={uploading}
             >
               <Text style={styles.recordButtonText}>
                 {isRecording ? '🔴 Detener Grabación' : '🎤 Grabar Audio'}
@@ -300,27 +291,19 @@ export default function MessageAudioModal({
             </View>
           )}
 
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
+          <View style={styles.buttonContainer}>            <TouchableOpacity 
               style={styles.selectButton} 
               onPress={handleSelectAudio}
-              disabled={uploading}
             >
               <Text style={styles.selectButtonText}>
                 {selectedAudio ? 'Cambiar Audio' : 'Seleccionar Audio'}
               </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.uploadButton, ((!selectedAudio && !recordingUri) || uploading) && styles.disabledButton]} 
+            </TouchableOpacity><TouchableOpacity 
+              style={[styles.uploadButton, (!selectedAudio && !recordingUri) && styles.disabledButton]} 
               onPress={handleSendAudio}
-              disabled={(!selectedAudio && !recordingUri) || uploading}
+              disabled={(!selectedAudio && !recordingUri)}
             >
-              {uploading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.uploadButtonText}>Enviar</Text>
-              )}
+              <Text style={styles.uploadButtonText}>Enviar</Text>
             </TouchableOpacity>
           </View>
         </ThemedView>

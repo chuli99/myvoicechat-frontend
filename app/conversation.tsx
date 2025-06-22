@@ -96,13 +96,29 @@ export default function ConversationScreen() {
   const handleParticipantAdded = () => {
     fetchParticipants(); // Refrescar la lista de participantes
     // También podríamos emitir un evento WebSocket para notificar a otros usuarios
-  };  // Manejar cuando se envía un audio - Unificado con el comportamiento de texto
+  };  // Manejar cuando se envía un audio - Crear mensaje optimista
   const handleAudioSent = () => {
-    // NO crear mensaje temporal aquí
-    // El mensaje llegará por WebSocket después de que el servidor lo procese
-    // Esto elimina el problema de "Mensaje de audio" temporal
+    // Crear mensaje optimista para audio
+    const tempAudioMessage: Message = {
+      id: Date.now(), // ID temporal
+      sender_id: authState.userId!,
+      content: 'Audio', // Texto placeholder
+      content_type: 'audio',
+      created_at: new Date().toISOString(),
+      temp: true,
+      sender: {
+        id: authState.userId!,
+        username: 'Tú'
+      }
+    };
     
-    console.log('Audio enviado correctamente - esperando mensaje real por WebSocket');
+    // Agregar mensaje optimista inmediatamente
+    setMessages(prev => [...prev, tempAudioMessage]);
+    
+    // Scroll al final
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    
+    console.log('✅ Mensaje de audio optimista creado - esperando mensaje real por WebSocket');
   };// Función para conectar WebSocket
   const connectWebSocket = () => {
     if (!authState.token || !id || wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -147,8 +163,7 @@ export default function ConversationScreen() {
                   console.error('🎵 Error al construir URL:', e);
                 }
               }
-              
-              setMessages(prev => {
+                setMessages(prev => {
                 // Verificar si el mensaje ya existe para evitar duplicados
                 const exists = prev.find(m => m.id === message.data.id && !m.temp);
                 if (exists) {
@@ -156,9 +171,34 @@ export default function ConversationScreen() {
                   return prev;
                 }
                 
-                console.log('✅ Agregando nuevo mensaje a la lista:', message.data.id);
-                // Agregar nuevo mensaje (tanto texto como audio)
-                return [...prev, message.data];
+                console.log('✅ Procesando nuevo mensaje:', message.data.id);
+                  // Remover cualquier mensaje temporal del mismo usuario con contenido similar
+                // Esto es especialmente importante para mensajes de texto
+                const filteredMessages = prev.filter(m => {
+                  // Si es un mensaje temporal del mismo usuario
+                  if (m.temp && m.sender_id === message.data.sender_id) {
+                    console.log('🔍 Evaluando mensaje temporal:', m.id, 'content:', m.content, 'type:', m.content_type);
+                    
+                    // Para mensajes de texto, comparar contenido
+                    if (message.data.content_type === 'text' && m.content_type === 'text') {
+                      // Si el contenido es similar, es probable que sea el mismo mensaje
+                      if (m.content && message.data.content && m.content.trim() === message.data.content.trim()) {
+                        console.log('🗑️ Removiendo mensaje temporal de texto duplicado:', m.id, 'contenido:', m.content);
+                        return false; // Remover este mensaje temporal
+                      }
+                    }
+                    // Para mensajes de audio, remover el temporal más reciente del mismo usuario
+                    else if (message.data.content_type === 'audio' && m.content_type === 'audio') {
+                      console.log('🗑️ Removiendo mensaje de audio temporal:', m.id);
+                      return false; // Remover este mensaje temporal
+                    }
+                  }
+                  return true; // Mantener todos los demás mensajes
+                });
+                
+                // Agregar el nuevo mensaje real
+                console.log('✅ Agregando nuevo mensaje real a la lista:', message.data.id);
+                return [...filteredMessages, message.data];
               });
               setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
             }
@@ -367,12 +407,12 @@ export default function ConversationScreen() {
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
-    
-    // Crear mensaje optimista
+      // Crear mensaje optimista
     const tempMessage: Message = {
       id: Date.now(), // ID temporal
       sender_id: authState.userId!,
       content: input.trim(),
+      content_type: 'text', // Agregar content_type para mejor comparación
       created_at: new Date().toISOString(),
       temp: true,
       sender: {
@@ -493,36 +533,52 @@ export default function ConversationScreen() {
       });
 
       console.log('🔍 AUDIO TRANSLATION DEBUG - Response status:', response.status);
-      console.log('🔍 AUDIO TRANSLATION DEBUG - Response headers:', Object.fromEntries(response.headers.entries()));
-
-      if (response.ok) {
+      console.log('🔍 AUDIO TRANSLATION DEBUG - Response headers:', Object.fromEntries(response.headers.entries()));      if (response.ok) {
         const data = await response.json();
         console.log('🔍 AUDIO TRANSLATION DEBUG - Respuesta completa del backend:');
         console.log('🔍 Raw response data:', JSON.stringify(data, null, 2));
         console.log('🔍 Tipo de data:', typeof data);
         console.log('🔍 Propiedades de data:', Object.keys(data));
+          // Buscar el audio traducido en diferentes posibles estructuras de respuesta
+        let translatedAudioData = null;
+        let translatedAudioUrl: string | null = null;
         
-        if (data.translated_message) {
-          console.log('🔍 translated_message encontrado:', JSON.stringify(data.translated_message, null, 2));
-          console.log('🔍 translated_message.content_type:', data.translated_message.content_type);
-          console.log('🔍 translated_message.media_url:', data.translated_message.media_url);
-        } else {
-          console.log('❌ No se encontró translated_message en la respuesta');
-        }        
-        // Verificar que la respuesta tenga el audio traducido
+        // Opción 1: La respuesta directa tiene content_type y media_url
         if (data && data.content_type === 'AUDIO' && data.media_url) {
-          console.log('✅ Respuesta de audio traducido válida encontrada');
+          console.log('✅ Estructura directa encontrada');
+          translatedAudioData = data;
+        }
+        // Opción 2: Hay un campo translated_message
+        else if (data.translated_message && data.translated_message.content_type === 'audio' && data.translated_message.media_url) {
+          console.log('✅ Estructura con translated_message encontrada');
+          translatedAudioData = data.translated_message;
+        }
+        // Opción 3: content_type en minúsculas
+        else if (data && data.content_type === 'audio' && data.media_url) {
+          console.log('✅ Estructura directa con content_type en minúsculas encontrada');
+          translatedAudioData = data;
+        }
+        // Opción 4: Intentar buscar cualquier campo que contenga audio
+        else {
+          console.log('🔍 Buscando audio traducido en estructura alternativa...');
+          // Revisar si hay algún campo que contenga media_url
+          for (const [key, value] of Object.entries(data)) {
+            if (value && typeof value === 'object' && (value as any).media_url) {
+              console.log(`🔍 Campo ${key} contiene media_url:`, value);
+              translatedAudioData = value;
+              break;
+            }
+          }
+        }
+        
+        if (translatedAudioData && translatedAudioData.media_url) {
+          console.log('✅ Datos de audio traducido encontrados:', translatedAudioData);
           
-          // Extraer el filename del media_url para construir la URL de descarga
-          const mediaUrl = data.media_url;
+          const mediaUrl = translatedAudioData.media_url;
           console.log('🔍 Media URL del audio traducido:', mediaUrl);
-          
-          // El filename es lo que está después de "translated/" en la URL
-          const filename = mediaUrl.split('/api/v1/audio/translated/')[1];
-          console.log('🔍 Filename extraído:', filename);
-          
-          if (filename) {
-            const translatedAudioUrl = `http://localhost:8080/api/v1/audio/translated/${filename}`;
+            // Construir la URL completa directamente con buildAudioUrl
+          try {
+            translatedAudioUrl = buildAudioUrl(mediaUrl);
             console.log('🔍 URL final construida para descarga:', translatedAudioUrl);
             
             // Actualizar el mensaje con la URL del audio traducido
@@ -530,23 +586,21 @@ export default function ConversationScreen() {
               msg.id === messageId 
                 ? { 
                     ...msg, 
-                    translatedAudioUrl,
+                    translatedAudioUrl: translatedAudioUrl!,
                     isLoadingAudioTranslation: false 
                   }
                 : msg
             ));
             
             console.log('✅ Estado actualizado con URL de audio traducido');
-          } else {
-            console.error('❌ No se pudo extraer el filename del media_url:', mediaUrl);
-            throw new Error('No se pudo extraer el filename del audio traducido');
+          } catch (urlError) {
+            console.error('❌ Error construyendo URL del audio traducido:', urlError);
+            throw new Error('No se pudo construir la URL del audio traducido');
           }
         } else {
-          console.error('❌ Respuesta no válida para audio traducido:');
-          console.error('❌ content_type:', data?.content_type);
-          console.error('❌ media_url:', data?.media_url);
-          console.error('❌ Estructura completa recibida:', data);
-          throw new Error('No se encontró audio traducido válido en la respuesta');
+          console.error('❌ No se encontró audio traducido válido en la respuesta:');
+          console.error('❌ Estructura completa recibida:', JSON.stringify(data, null, 2));
+          throw new Error('No se encontró audio traducido válido en la respuesta del servidor');
         }} else {
         console.error('❌ Response no OK. Status:', response.status);
         console.error('❌ Response statusText:', response.statusText);
