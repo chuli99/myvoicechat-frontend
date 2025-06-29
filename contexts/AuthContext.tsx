@@ -76,8 +76,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (username: string, password: string) => {
+    console.log('🔐 AuthContext: Iniciando proceso de login...');
+    setError(null); // Limpiar errores previos
+    
     try {
+      console.log('🔐 AuthContext: Llamando a AuthService.login...');
       const responseData = await AuthService.login(username, password);
+      console.log('🔐 AuthContext: Login exitoso, procesando respuesta...');
+      
       const { access_token, user_id, username: user_username } = responseData;
       
       // Set token for authenticated requests
@@ -96,22 +102,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         username: user_username,
       });
 
+      console.log('✅ AuthContext: Login completado exitosamente, navegando...');
       // Navigate to home screen
       router.replace('/(tabs)');
     } catch (e: any) {
-      console.log('Login error', e.response?.data || e.message);
+      console.error('❌ AuthContext: Login falló:', e);
+      console.error('❌ Error completo:', e.response?.data || e.message);
       setError(e.response?.data?.detail || 'Failed to login. Please check your credentials.');
     }
   };
 
   const register = async (username: string, email: string, primaryLanguage: string, password: string) => {
+    console.log('📝 AuthContext: Iniciando proceso de registro...');
+    setError(null); // Limpiar errores previos
+    
     try {
+      console.log('📝 AuthContext: Llamando a AuthService.register...');
       await AuthService.register(username, email, primaryLanguage, password);
+      console.log('📝 AuthContext: Registro exitoso, iniciando auto-login...');
       
       // Auto login after successful registration
       await login(username, password);
     } catch (e: any) {
-      console.log('Register error', e.response?.data || e.message);
+      console.error('❌ AuthContext: Registro falló:', e);
+      console.error('❌ Error completo:', e.response?.data || e.message);
       setError(e.response?.data?.detail || 'Registration failed. Please try again.');
     }
   };  const logout = async () => {

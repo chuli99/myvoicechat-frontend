@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
+import { BASE_URL } from '@/config/api';
 
 interface CreateConversationModalProps {
   visible: boolean;
@@ -29,7 +30,7 @@ export default function CreateConversationModal({
   const handleCreateConversation = async () => {
     setCreating(true);
     try {
-      const response = await fetch('http://localhost:8080/api/v1/conversations', {
+      const response = await fetch(`${BASE_URL}/api/v1/conversations`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

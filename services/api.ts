@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { BASE_URL } from '../config/api';
 
-const BASE_URL_AUTH = 'http://localhost:8080/api/v1';
-const BASE_URL_USER = 'http://localhost:8080/api/v1';
+const BASE_URL_AUTH = `${BASE_URL}/api/v1`;
+const BASE_URL_USER = `${BASE_URL}/api/v1`;
 
 // Create API instances
 const authAPI = axios.create({
@@ -21,18 +22,46 @@ const userAPI = axios.create({
 // Authentication services
 export const AuthService = {
   login: async (username: string, password: string) => {
-    const response = await authAPI.post('/users/login', { username, password });
-    return response.data;
+    console.log('🔐 LOGIN DEBUG - Intentando login con:');
+    console.log('🔐 Username:', username);
+    console.log('🔐 Base URL Auth:', BASE_URL_AUTH);
+    console.log('🔐 Full URL que se usará:', `${BASE_URL_AUTH}/users/login`);
+    
+    try {
+      const response = await authAPI.post('/users/login', { username, password });
+      console.log('✅ LOGIN exitoso - respuesta recibida');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ LOGIN falló - error:', error.message);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+      throw error;
+    }
   },
   
   register: async (username: string, email: string, primaryLanguage: string, password: string) => {
-    const response = await userAPI.post('/users/register', {
-      username,
-      email,
-      primary_language: primaryLanguage,
-      password,
-    });
-    return response.data;
+    console.log('📝 REGISTER DEBUG - Intentando registro con:');
+    console.log('📝 Username:', username);
+    console.log('📝 Email:', email);
+    console.log('📝 Language:', primaryLanguage);
+    console.log('📝 Base URL User:', BASE_URL_USER);
+    console.log('📝 Full URL que se usará:', `${BASE_URL_USER}/users/register`);
+    
+    try {
+      const response = await userAPI.post('/users/register', {
+        username,
+        email,
+        primary_language: primaryLanguage,
+        password,
+      });
+      console.log('✅ REGISTER exitoso - respuesta recibida');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ REGISTER falló - error:', error.message);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+      throw error;
+    }
   },
 };
 

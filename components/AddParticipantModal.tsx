@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
+import { BASE_URL } from '@/config/api';
 
 interface AddParticipantModalProps {
   visible: boolean;
@@ -46,7 +47,7 @@ export default function AddParticipantModal({
     setLoading(true);
     setError(null);    try {
       // Buscar usuario por username usando la nueva ruta
-      const searchResponse = await fetch(`http://localhost:8080/api/v1/users/search/${encodeURIComponent(username.trim())}`, {
+      const searchResponse = await fetch(`${BASE_URL}/api/v1/users/search/${encodeURIComponent(username.trim())}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -66,7 +67,7 @@ export default function AddParticipantModal({
       }
 
       // Agregar el participante a la conversación
-      const addResponse = await fetch('http://localhost:8080/api/v1/participants', {
+      const addResponse = await fetch(`${BASE_URL}/api/v1/participants`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

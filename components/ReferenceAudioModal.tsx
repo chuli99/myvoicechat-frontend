@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
+import { BASE_URL } from '@/config/api';
 
 interface ReferenceAudioModalProps {
   visible: boolean;
@@ -165,9 +166,9 @@ export default function ReferenceAudioModal({ visible, onClose, token }: Referen
     console.log('🔍 Enviando FormData con:');
     console.log('Platform:', Platform.OS);
     console.log('Token:', token ? 'Presente' : 'Faltante');
-    console.log('URL:', 'http://localhost:8080/api/v1/audio/upload-reference-audio');
+    console.log('URL:', `${BASE_URL}/api/v1/audio/upload-reference-audio`);
 
-    const response = await fetch('http://localhost:8080/api/v1/audio/upload-reference-audio', {
+    const response = await fetch(`${BASE_URL}/api/v1/audio/upload-reference-audio`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,

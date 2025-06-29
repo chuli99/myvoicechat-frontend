@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
+import { BASE_URL } from '@/config/api';
 
 interface JoinConversationModalProps {
   visible: boolean;
@@ -45,7 +46,7 @@ export default function JoinConversationModal({
       
       setLoading(true);
       setError(null);      try {        // Obtener todas las conversaciones
-        const response = await fetch('http://localhost:8080/api/v1/conversations/all', {
+        const response = await fetch(`${BASE_URL}/api/v1/conversations/all`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
@@ -62,7 +63,7 @@ export default function JoinConversationModal({
           allConversations.map(async (conv: Conversation) => {
             try {
               const participantsRes = await fetch(
-                `http://localhost:8080/api/v1/participants/conversation/${conv.id}`,
+                `${BASE_URL}/api/v1/participants/conversation/${conv.id}`,
                 {
                   headers: {
                     'Authorization': `Bearer ${token}`,
@@ -106,7 +107,7 @@ export default function JoinConversationModal({
   const handleJoinConversation = async (conversationId: number) => {
     setJoining(conversationId);
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/participants/conversation/${conversationId}/join`, {
+      const response = await fetch(`${BASE_URL}/api/v1/participants/conversation/${conversationId}/join`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

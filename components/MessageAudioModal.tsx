@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
+import { BASE_URL } from '@/config/api';
 
 interface MessageAudioModalProps {
   visible: boolean;
@@ -186,10 +187,10 @@ export default function MessageAudioModal({
       console.log('Platform:', Platform.OS);
       console.log('Token:', token ? 'Presente' : 'Faltante');
       console.log('Conversation ID:', conversationId);
-      console.log('URL:', 'http://localhost:8080/api/v1/messages/');
+      console.log('URL:', `${BASE_URL}/api/v1/messages/`);
 
       // Usar el mismo endpoint que los mensajes de texto para unificar el comportamiento
-      const response = await fetch('http://localhost:8080/api/v1/messages/', {
+      const response = await fetch(`${BASE_URL}/api/v1/messages/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

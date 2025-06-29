@@ -2,6 +2,7 @@ import AddParticipantModal from '@/components/AddParticipantModal';
 import MessageAudioModal from '@/components/MessageAudioModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { createAuthenticatedAPI } from '@/services/api';
+import { BASE_URL, getWebSocketURL } from '@/config/api';
 import { Audio } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
@@ -124,7 +125,7 @@ export default function ConversationScreen() {
     if (!authState.token || !id || wsRef.current?.readyState === WebSocket.OPEN) return;
 
     // Usar la misma URL que funciona en el HTML
-    const wsUrl = `ws://localhost:8080/api/v1/ws/${id}?token=${encodeURIComponent(authState.token)}`;
+    const wsUrl = getWebSocketURL(`/api/v1/ws/${id}?token=${encodeURIComponent(authState.token)}`);
     console.log('Conectando WebSocket a:', wsUrl);
     
     try {
@@ -303,10 +304,10 @@ export default function ConversationScreen() {
     const api = createAuthenticatedAPI(authState.token);
     setLoading(true);
       Promise.all([
-      api.get(`http://localhost:8080/api/v1/participants/conversation/${id}`, {
+      api.get(`${BASE_URL}/api/v1/participants/conversation/${id}`, {
         headers: { 'Authorization': 'Bearer ' + authState.token }
       }),
-      api.get(`http://localhost:8080/api/v1/messages/conversation/${id}`, {
+      api.get(`${BASE_URL}/api/v1/messages/conversation/${id}`, {
         headers: { 'Authorization': 'Bearer ' + authState.token }
       })
     ])
@@ -435,7 +436,7 @@ export default function ConversationScreen() {
       form.append('conversation_id', id as string);
       form.append('content_type', 'text');
       form.append('content', messageContent);
-        const res = await fetch('http://localhost:8080/api/v1/messages/', {
+        const res = await fetch(`${BASE_URL}/api/v1/messages/`, {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer ' + authState.token
@@ -481,7 +482,7 @@ export default function ConversationScreen() {
           : msg
       ));
 
-      const response = await fetch(`http://localhost:8080/api/v1/translations/message/${messageId}`, {
+      const response = await fetch(`${BASE_URL}/api/v1/translations/message/${messageId}`, {
         headers: {
           'Authorization': `Bearer ${authState.token}`
         }
@@ -526,7 +527,7 @@ export default function ConversationScreen() {
         msg.id === messageId 
           ? { ...msg, isLoadingAudioTranslation: true }
           : msg
-      ));      const response = await fetch(`http://localhost:8080/api/v1/translations/message/${messageId}`, {
+      ));      const response = await fetch(`${BASE_URL}/api/v1/translations/message/${messageId}`, {
         headers: {
           'Authorization': `Bearer ${authState.token}`
         }
@@ -647,13 +648,13 @@ export default function ConversationScreen() {
     
     // Si es un path relativo, agregar el dominio base
     if (cleanMediaUrl.startsWith('/api/')) {
-      const fullUrl = `http://localhost:8080${cleanMediaUrl}`;
+      const fullUrl = `${BASE_URL}${cleanMediaUrl}`;
       console.log('✅ URL construida desde path del backend:', fullUrl);
       return fullUrl;
     }
     
     // Fallback: asumir que es una URL relativa del backend
-    const fullUrl = `http://localhost:8080${cleanMediaUrl.startsWith('/') ? cleanMediaUrl : '/' + cleanMediaUrl}`;
+    const fullUrl = `${BASE_URL}${cleanMediaUrl.startsWith('/') ? cleanMediaUrl : '/' + cleanMediaUrl}`;
     console.log('✅ URL construida como fallback:', fullUrl);
     return fullUrl;
   };// Función para reproducir audio
