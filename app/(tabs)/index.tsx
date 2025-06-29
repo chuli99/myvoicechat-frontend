@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, Image, Dimensions, Modal } from 'react-native';
 
 import CreateConversationModal from '@/components/CreateConversationModal';
 import ReferenceAudioModal from '@/components/ReferenceAudioModal';
@@ -19,6 +19,19 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);  const [showAudioModal, setShowAudioModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenWidth(window.width);
+      if (window.width > 600) {
+        setShowMobileMenu(false);
+      }
+    });
+
+    return () => subscription?.remove();
+  }, []);
 
   const fetchConversations = async () => {
     if (!authState.token) return;
@@ -147,65 +160,127 @@ export default function HomeScreen() {
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onConversationCreated={handleConversationCreatedOrJoined}        token={authState.token || ''}
-      />      {/* Header MyVoice Chat */}
-      <ThemedView style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Image 
-            source={require('../../img/icons/logo.png')} 
-            style={styles.headerLogo} 
-            resizeMode="contain"
-          />
-        </View>
-        <View style={styles.headerButtons}>
-          {/* Botón para subir audio de referencia */}          <TouchableOpacity 
-            style={styles.audioButton} 
-            onPress={handleShowAudioModalManually}
-          >
-            <ThemedText style={styles.audioButtonText}>
-              🎙️ Audio de Referencia
-            </ThemedText>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <ThemedText style={styles.logoutButtonText}>Cerrar sesión</ThemedText>
-          </TouchableOpacity>
-        </View>
-      </ThemedView>
-      
-      {/* Content */}
-      <ThemedView style={styles.content}>        <ThemedView style={styles.titleContainer}>
-          <ThemedText style={styles.conversationsTitle}>Mis Conversaciones</ThemedText>
-          <View style={styles.conversationButtons}>
-            <TouchableOpacity 
-              style={styles.createButton} 
-              onPress={handleShowCreateModal}
-              disabled={loading}
-            >
-              <Text style={styles.createButtonText}>+ Crear</Text>
-            </TouchableOpacity>
-          </View>
-        </ThemedView>
-        {error && <Text style={{ color: '#e84118', marginBottom: 10 }}>{error}</Text>}
-        {loading ? (
-          <ActivityIndicator size="large" color={tintColor} style={{ marginVertical: 30 }} />
-        ) : (        <FlatList
-            data={conversations}
-            keyExtractor={item => item.id.toString()}
-            ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#888', marginTop: 30 }}>No tienes conversaciones aún.</Text>}
-            renderItem={({ item }) => (
-              <View style={convStyles.item}>
-                <View style={convStyles.conversationInfo}>
-                  <Text style={convStyles.title}>{getConversationName(item)}</Text>
-                  <Text style={convStyles.conversationId}>ID: {item.id}</Text>
-                </View>
-                <TouchableOpacity style={convStyles.enterBtn} onPress={() => handleEnterConversation(item.id)}>
-                  <Text style={{ color: '#fff' }}>Entrar</Text>
+      />      {/* Content con header integrado */}
+      <ThemedView style={styles.content}>
+        {/* Header integrado sin restricciones */}
+        <View style={styles.topSection}>
+          <View style={styles.headerRow}>
+            <View style={styles.logoSection}>
+              <Image 
+                source={require('../../img/icons/logo.png')} 
+                style={styles.headerLogo} 
+                resizeMode="contain"
+              />
+            </View>
+            
+            {/* Botones del header - responsive */}
+            {screenWidth > 600 ? (
+              // Desktop/Tablet - mostrar botones directamente
+              <View style={styles.headerButtons}>
+                <TouchableOpacity 
+                  style={styles.audioButton} 
+                  onPress={handleShowAudioModalManually}
+                >
+                  <ThemedText style={styles.audioButtonText}>
+                    🎙️ Audio de Referencia
+                  </ThemedText>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                  <ThemedText style={styles.logoutButtonText}>Cerrar sesión</ThemedText>
                 </TouchableOpacity>
               </View>
+            ) : (
+              // Mobile - solo mostrar botón hamburguesa sin el menú desplegable
+              <TouchableOpacity 
+                style={styles.hamburgerButton}
+                onPress={() => setShowMobileMenu(!showMobileMenu)}
+              >
+                <Text style={styles.hamburgerIcon}>☰</Text>
+              </TouchableOpacity>
             )}
-            style={{ marginTop: 20 }}
-          />
-        )}
+          </View>
+        </View>
+
+        {/* Menú desplegable móvil usando Modal - Solución definitiva */}
+        <Modal
+          visible={showMobileMenu && screenWidth <= 600}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowMobileMenu(false)}
+        >
+          <TouchableOpacity 
+            style={styles.modalOverlay}
+            onPress={() => setShowMobileMenu(false)}
+            activeOpacity={1}
+          >
+            <View style={styles.modalDropdown}>
+              <TouchableOpacity 
+                style={styles.mobileMenuItem}
+                onPress={() => {
+                  console.log('Audio de referencia pressed'); // Debug
+                  handleShowAudioModalManually();
+                  setShowMobileMenu(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.mobileMenuText}>🎙️ Audio de Referencia</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.mobileMenuItem, styles.lastMenuItem]}
+                onPress={() => {
+                  console.log('Logout pressed'); // Debug
+                  handleLogout();
+                  setShowMobileMenu(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.mobileMenuText}>🚪 Cerrar sesión</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>        
+        {/* Sección de conversaciones */}
+        <View style={styles.conversationsSection}>
+          <ThemedView style={styles.titleContainer}>
+            <ThemedText style={styles.conversationsTitle}>Mis Conversaciones</ThemedText>
+            <View style={styles.conversationButtons}>
+              <TouchableOpacity 
+                style={styles.createButton} 
+                onPress={handleShowCreateModal}
+                disabled={loading}
+              >
+                <Text style={styles.createButtonText}>+ Crear</Text>
+              </TouchableOpacity>
+            </View>
+          </ThemedView>
+          
+          {error && <Text style={{ color: '#e84118', marginBottom: 10, paddingHorizontal: 20 }}>{error}</Text>}
+          
+          {loading ? (
+            <ActivityIndicator size="large" color={tintColor} style={{ marginVertical: 30 }} />
+          ) : (
+            <FlatList
+              data={conversations}
+              keyExtractor={item => item.id.toString()}
+              ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#888', marginTop: 30, paddingHorizontal: 20 }}>No tienes conversaciones aún.</Text>}
+              renderItem={({ item }) => (
+                <View style={convStyles.item}>
+                  <View style={convStyles.conversationInfo}>
+                    <Text style={convStyles.title}>{getConversationName(item)}</Text>
+                    <Text style={convStyles.conversationId}>ID: {item.id}</Text>
+                  </View>
+                  <TouchableOpacity style={convStyles.enterBtn} onPress={() => handleEnterConversation(item.id)}>
+                    <Text style={{ color: '#fff' }}>Entrar</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              style={{ marginTop: 20 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            />
+          )}
+        </View>
       </ThemedView>
     </ThemedView>
   );
@@ -215,45 +290,55 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
-  },  header: {
-    backgroundColor: '#273c75',
-    paddingTop: 50,
-    paddingBottom: 15,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-  },  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },  headerLogo: {
-    width: 150,
-    height: 150,
-    maxWidth: 150,
-    maxHeight: 150,
   },
   content: {
     flex: 1,
-    padding: 20,
-  },  titleContainer: {
+    paddingTop: 50,
+    backgroundColor: '#f8f9fa', // Asegurar que el content tenga el mismo fondo
+  },
+  topSection: {
+    backgroundColor: '#f8f9fa',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    zIndex: 0, // Header con z-index bajo
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  logoSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'flex-start', // Alinear logo a la izquierda
+  },
+  headerLogo: {
+    width: 80,
+    height: 80,
+  },
+  titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    backgroundColor: '#f8f9fa', // Asegurar fondo consistente
+    zIndex: 1,
   },
   conversationsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#273c75',
-  },headerButtons: {
+  },
+  headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -274,7 +359,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 6,
-  },  logoutButtonText: {
+  },
+  logoutButtonText: {
     color: 'white',
     fontWeight: 'bold',
     fontSize: 14,
@@ -292,7 +378,62 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     color: 'white',
-    fontWeight: 'bold',    fontSize: 12,
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  // Estilos para menú móvil responsive (con Modal)
+  hamburgerButton: {
+    backgroundColor: '#273c75',
+    padding: 10,
+    borderRadius: 6,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hamburgerIcon: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  mobileMenuItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  lastMenuItem: {
+    borderBottomWidth: 0,
+  },
+  mobileMenuText: {
+    fontSize: 14,
+    color: '#273c75',
+    fontWeight: '500',
+  },
+  conversationsSection: {
+    flex: 1,
+    backgroundColor: '#f8f9fa', // Asegurar fondo consistente
+    zIndex: 1,
+  },
+  // Estilos para Modal del menú hamburguesa
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 100, // Para posicionarlo debajo del header
+    paddingRight: 20,
+  },
+  modalDropdown: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 10,
+    minWidth: 200,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
 });
 
@@ -301,6 +442,7 @@ const convStyles = StyleSheet.create({
     backgroundColor: '#f1f2f6',
     borderRadius: 8,
     marginBottom: 14,
+    marginHorizontal: 20,
     padding: 18,
     flexDirection: 'row',
     alignItems: 'center',

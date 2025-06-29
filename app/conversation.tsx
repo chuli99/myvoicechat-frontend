@@ -6,7 +6,8 @@ import { BASE_URL, getWebSocketURL } from '@/config/api';
 import { Audio } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Actualiza la interfaz Message para incluir sender
 interface Message {
@@ -54,6 +55,7 @@ export default function ConversationScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { authState } = useAuth();
+  const insets = useSafeAreaInsets();
   
   console.log('ConversationScreen mounted with id:', id);
   console.log('Auth state:', authState.token ? 'authenticated' : 'not authenticated');
@@ -1146,32 +1148,31 @@ export default function ConversationScreen() {
         conversationId={id as string}
       />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
           <Text style={{ color: '#273c75', fontSize: 18 }}>← Volver</Text>
         </TouchableOpacity>
-        <FlatList
-          data={participants}
-          keyExtractor={p => p.user.id.toString()}
-          horizontal
-          renderItem={({ item }) => (
-            <View style={styles.participant}><Text style={{ color: '#273c75' }}>{item.user.username}</Text></View>
-          )}
-          style={{ flexGrow: 0, marginLeft: 10 }}
-        />        {/* Indicador de estado de conexión */}
-        <View style={[styles.connectionStatus, !isConnected && styles.disconnected]}>
-          <Text style={styles.connectionStatusText}>
-            {isConnected ? '●' : '○'}
-          </Text>
+        
+        {/* Mostrar solo el username del otro usuario */}
+        <View style={styles.otherUserInfo}>
+          {participants
+            .filter(p => p.user.id !== authState.userId)
+            .map(participant => (
+              <Text key={participant.user.id} style={styles.otherUsername}>
+                {participant.user.username}
+              </Text>
+            ))}
         </View>
         
-        {/* Botón para agregar participante */}
-        <TouchableOpacity 
-          style={styles.addParticipantButton} 
-          onPress={() => setShowAddParticipantModal(true)}
-        >
-          <Text style={styles.addParticipantText}>+👤</Text>
-        </TouchableOpacity>
+        {/* Botón para agregar participante - solo si no hay otros participantes */}
+        {participants.filter(p => p.user.id !== authState.userId).length === 0 && (
+          <TouchableOpacity 
+            style={styles.addParticipantButton} 
+            onPress={() => setShowAddParticipantModal(true)}
+          >
+            <Text style={styles.addParticipantText}>+👤</Text>
+          </TouchableOpacity>
+        )}
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
       {loading ? <ActivityIndicator size="large" color="#273c75" style={{ marginTop: 40 }} /> : (
@@ -1187,7 +1188,7 @@ export default function ConversationScreen() {
           />
           {renderTypingIndicator()}
         </>
-      )}      <View style={styles.inputRow}>
+      )}      <View style={[styles.inputRow, { paddingBottom: insets.bottom + 10 }]}>
         <TextInput
           style={styles.input}
           value={input}
@@ -1203,12 +1204,12 @@ export default function ConversationScreen() {
         >
           <Image 
             source={require('../img/icons/micro_icon.png')} 
-            style={{ width: 30, height: 30, marginRight: 8 }}
+            style={{ width: 30, height: 30 }}
           />
         </TouchableOpacity>        <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={sending || !input.trim()}>
           <Image 
             source={require('../img/icons/msg_icon.png')} 
-            style={{ width: 30, height: 30, marginRight: 8 }}
+            style={{ width: 30, height: 30 }}
           />
         </TouchableOpacity>
       </View>
@@ -1221,7 +1222,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    paddingTop: 18,
     paddingBottom: 8,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
@@ -1240,6 +1240,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginRight: 6,
     marginLeft: 2,
+  },
+  otherUserInfo: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  otherUsername: {
+    color: '#273c75',
+    fontSize: 16,
+    fontWeight: 'bold',
   },  error: {
     color: '#e84118',
     textAlign: 'center',
@@ -1346,20 +1355,6 @@ const styles = StyleSheet.create({
   },
   dot3: {
     animationDelay: '0.4s',
-  },
-  connectionStatus: {
-    backgroundColor: '#28a745',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  connectionStatusText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },  disconnected: {
-    backgroundColor: '#dc3545',
   },
   addParticipantButton: {
     backgroundColor: '#00a8ff',
