@@ -20,59 +20,54 @@ export default function WelcomeScreen() {
     router.replace('/register');
   };  return (
     <ThemedView style={styles.container}>
-        {/* Header */}
-      <ThemedView style={styles.header}>
-        <Image 
-          source={require('../img/icons/logo.png')} 
-          style={styles.headerLogo} 
-          resizeMode="contain"
-        />
-      </ThemedView>
+      {/* Logo principal */}
+      <Image 
+        source={require('../img/icons/logo.png')} 
+        style={styles.mainLogo} 
+        resizeMode="contain"
+      />
       
-      
-        
-        <ThemedText style={styles.title} type="title">MyVoiceChat</ThemedText>
-        <ThemedText style={styles.subtitle}>Your modern voice interface</ThemedText>
+      <ThemedText style={styles.subtitle}>Tu interfaz de voz moderna</ThemedText>
         
         <ThemedView style={styles.featureContainer}>
           <ThemedView style={styles.featureItem}>
             <ThemedText style={styles.featureTitle}>Simple</ThemedText>
             <ThemedText style={styles.featureDescription}>
-              Intuitive interface designed for all users
+              Interfaz intuitiva diseñada para todos los usuarios
             </ThemedText>
           </ThemedView>
           
           <ThemedView style={styles.featureItem}>
-            <ThemedText style={styles.featureTitle}>Fast</ThemedText>
+            <ThemedText style={styles.featureTitle}>Rápido</ThemedText>
             <ThemedText style={styles.featureDescription}>
-              Real-time voice communications
+              Comunicaciones de voz en tiempo real
             </ThemedText>
           </ThemedView>
           
           <ThemedView style={styles.featureItem}>
-            <ThemedText style={styles.featureTitle}>Secure</ThemedText>
+            <ThemedText style={styles.featureTitle}>Multilenguaje</ThemedText>
             <ThemedText style={styles.featureDescription}>
-              Your conversations are private and protected
+              Inglés, Chino y Español
             </ThemedText>
           </ThemedView>
         </ThemedView>
         
         <ThemedView style={styles.buttonContainer}>
           <ThemedButton
-            title="Login"
+            title="Iniciar Sesión"
             onPress={navigateToLogin}
             style={styles.primaryButton}
           />
           
           <ThemedButton
-            title="Create Account"
+            title="Crear Cuenta"
             variant="outline"
             onPress={navigateToRegister}
             style={styles.secondaryButton}
           />
         </ThemedView>
           <ThemedText style={styles.footerText}>
-          © 2025 MyVoiceChat - All rights reserved
+          © 2025 MyVoiceChat - Todos los derechos reservados
         </ThemedText>
       </ThemedView>
     
@@ -84,41 +79,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,  },  header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    alignItems: 'flex-start',
-    paddingTop: 45,
-    paddingBottom: 10,
-    paddingHorizontal: 15,
-    zIndex: 10,
-    backgroundColor: '#273c75',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,  },headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-  },  headerLogo: {
-    width: 55,
-    height: 55,
-    maxWidth: '15%',
-    maxHeight: 55,
-  },content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 100, // Reducido para hacer espacio para el header más compacto
-    width: '100%',
+    padding: 20,
   },
-  logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 40,
+  mainLogo: {
+    width: 240,
+    height: 240,
+    marginBottom: 30,
   },
   title: {
     marginBottom: 10,
@@ -145,7 +111,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 5,
-  },  featureDescription: {
+  },
+  featureDescription: {
     opacity: 0.8,
   },
   buttonContainer: {
