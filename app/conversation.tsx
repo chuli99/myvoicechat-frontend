@@ -83,6 +83,10 @@ export default function ConversationScreen() {
     // Estado para reproducción de audio
   const [playingAudio, setPlayingAudio] = useState<{ [key: string]: boolean }>({});
   const [audioObjects, setAudioObjects] = useState<{ [key: string]: any }>({});
+  // Estado para el switch de audio (original vs traducido)
+  const [audioSwitchStates, setAudioSwitchStates] = useState<{ [key: number]: boolean }>({});
+  // Estado para el switch de traducción de texto (original vs traducido)
+  const [textSwitchStates, setTextSwitchStates] = useState<{ [key: number]: boolean }>({});
   // Función para refrescar participantes
   const fetchParticipants = async () => {
     if (!authState.token || !id) return;
@@ -967,6 +971,66 @@ export default function ConversationScreen() {
     }
   };
 
+  // Función para alternar entre audio original y traducido
+  const toggleAudioSwitch = async (messageId: number) => {
+    const isCurrentlyTranslated = audioSwitchStates[messageId] || false;
+    
+    // Pausar cualquier audio que esté reproduciéndose
+    for (const [id, isPlaying] of Object.entries(playingAudio)) {
+      if (isPlaying) {
+        const audioKey = isNaN(parseInt(id)) ? id : parseInt(id);
+        if (audioObjects[audioKey]) {
+          await audioObjects[audioKey].pauseAsync();
+        }
+      }
+    }
+    setPlayingAudio({});
+    
+    // Cambiar el estado del switch
+    setAudioSwitchStates(prev => ({
+      ...prev,
+      [messageId]: !isCurrentlyTranslated
+    }));
+    
+    // Si no está traducido y necesitamos obtener la traducción
+    if (!isCurrentlyTranslated) {
+      const message = messages.find(m => m.id === messageId);
+      if (message && !message.translatedAudioUrl && !message.isLoadingAudioTranslation) {
+        await getAudioTranslation(messageId);
+      }
+    }
+  };
+
+  // Función para reproducir audio según el estado del switch
+  const playAudioBySwitch = async (messageId: number, originalMediaUrl: string, translatedAudioUrl?: string) => {
+    const isTranslatedMode = audioSwitchStates[messageId] || false;
+    
+    if (isTranslatedMode && translatedAudioUrl) {
+      await playTranslatedAudio(messageId, translatedAudioUrl);
+    } else {
+      await playAudio(messageId, originalMediaUrl);
+    }
+  };
+
+  // Función para alternar entre texto original y traducido
+  const toggleTextSwitch = async (messageId: number) => {
+    const isCurrentlyTranslated = textSwitchStates[messageId] || false;
+    
+    // Cambiar el estado del switch
+    setTextSwitchStates(prev => ({
+      ...prev,
+      [messageId]: !isCurrentlyTranslated
+    }));
+    
+    // Si no está traducido y necesitamos obtener la traducción
+    if (!isCurrentlyTranslated) {
+      const message = messages.find(m => m.id === messageId);
+      if (message && !message.translatedContent && !message.isLoadingTranslation) {
+        await getTranslation(messageId);
+      }
+    }
+  };
+
   const renderItem = ({ item, index }: { item: Message, index: number }) => {
     const isMe = item.sender_id === authState.userId;
     const showUsername = !isMe && (index === 0 || messages[index-1]?.sender_id !== item.sender_id);
@@ -977,133 +1041,119 @@ export default function ConversationScreen() {
         {showUsername && (
           <Text style={styles.username}>{getUsername(item)}</Text>
         )}
-        <View style={[styles.messageRow, isMe ? styles.meRow : styles.otherRow]}>
+        <View style={[styles.messageColumn, isMe ? styles.meColumn : styles.otherColumn]}>
           <View style={[
             styles.bubble, 
             isMe ? styles.meBubble : styles.otherBubble,
             item.temp && styles.tempMessage,
-            isAudioMessage && styles.audioBubble
+            isAudioMessage && styles.audioBubble,
+            // Cambiar color si está en modo traducido
+            (isAudioMessage && audioSwitchStates[item.id] && item.translatedAudioUrl) && styles.translatedBubble,
+            (!isAudioMessage && textSwitchStates[item.id] && item.translatedContent) && styles.translatedBubble
           ]}>            {isAudioMessage ? (
               <View style={styles.audioMessageContainer}>
-                <Image 
-                  source={require('../img/icons/audio_icon.png')} 
-                  style={{ width: 25, height: 25, marginRight: 8 }}
-                />
-                <Text style={[styles.messageText, { fontStyle: 'italic' }]}>
-                  Audio
-                </Text>
-                {item.media_url && !item.temp && (
-                  <TouchableOpacity 
-                    style={styles.playButton}
-                    onPress={() => {
-                      console.log('🔍 AUDIO DEBUG - Reproductor presionado:');
-                      console.log('🔍 Message ID:', item.id);
-                      console.log('🔍 Message object completo:', JSON.stringify(item, null, 2));
-                      console.log('🔍 media_url value:', item.media_url);
-                      console.log('🔍 media_url type:', typeof item.media_url);
-                      console.log('🔍 content_type:', item.content_type);
-                      console.log('🔍 is temp:', item.temp);
-                      console.log('🔍 created_at:', item.created_at);
-                      console.log('🔍 sender_id:', item.sender_id);
-                      console.log('🔍 calling playAudio...');
-                      playAudio(item.id, item.media_url!);
-                    }}                  >
-                    {playingAudio[item.id] ? (
-                      <Text style={styles.playButtonText}>⏸️ Pausar</Text>
-                    ) : (
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={styles.audioMainRow}>
+                  <Image 
+                    source={require('../img/icons/audio_icon.png')} 
+                    style={{ width: 25, height: 25, marginRight: 8 }}
+                  />
+                  <Text style={[styles.messageText, { fontStyle: 'italic' }]}>
+                    Audio
+                  </Text>
+                  {item.media_url && !item.temp && (
+                    <TouchableOpacity 
+                      style={styles.playButton}
+                      onPress={() => {
+                        console.log('🔍 AUDIO DEBUG - Reproductor presionado:');
+                        console.log('🔍 Message ID:', item.id);
+                        console.log('🔍 Switch state:', audioSwitchStates[item.id]);
+                        console.log('🔍 Has translated URL:', !!item.translatedAudioUrl);
+                        playAudioBySwitch(item.id, item.media_url!, item.translatedAudioUrl);
+                      }}
+                    >
+                      {(playingAudio[item.id] && !audioSwitchStates[item.id]) || (playingAudio[`translated_${item.id}`] && audioSwitchStates[item.id]) ? (
+                        <Image 
+                          source={require('../img/icons/pause.png')} 
+                          style={{width: 25, height: 25}}
+                        />
+                      ) : (
                         <Image 
                           source={require('../img/icons/play_icon.png')} 
-                          style={{width: 25, height: 25, marginRight: 8  }}
+                          style={{width: 25, height: 25}}
                         />
-                      </View>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Switch de traducción */}
+                {!item.temp && (
+                  <View style={styles.audioSwitchContainer}>
+                    <Text style={styles.switchLabel}>Original</Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.audioSwitch,
+                        audioSwitchStates[item.id] && styles.audioSwitchActive
+                      ]}
+                      onPress={() => toggleAudioSwitch(item.id)}
+                      disabled={item.isLoadingAudioTranslation}
+                    >
+                      <View style={[
+                        styles.audioSwitchThumb,
+                        audioSwitchStates[item.id] && styles.audioSwitchThumbActive
+                      ]} />
+                    </TouchableOpacity>
+                    <Text style={styles.switchLabel}>Traducido</Text>
+                    {item.isLoadingAudioTranslation && (
+                      <Text style={styles.loadingTranslation}>Cargando...</Text>
                     )}
-                  </TouchableOpacity>
+                  </View>
                 )}
+
                 {item.temp && (
                   <Text style={styles.sendingIndicator}>Enviando...</Text>
                 )}
               </View>
             ) : (
-              <Text style={[styles.messageText, item.temp && styles.tempText]}>
-                {item.content || '[Sin texto]'}
-              </Text>
-            )}
-              {/* Botón de traducir - para texto */}
-            {!item.temp && !isAudioMessage && (
-              <View style={styles.translationSection}>
-                {!item.translatedContent && !item.isLoadingTranslation && (
-                  <TouchableOpacity 
-                    onPress={() => getTranslation(item.id)}
-                    style={styles.translateButton}
-                  >
-                    <Text style={styles.translateText}>Traducir</Text>
-                  </TouchableOpacity>
-                )}
+              <View style={styles.textMessageContainer}>
+                <Text style={[styles.messageText, item.temp && styles.tempText]}>
+                  {textSwitchStates[item.id] && item.translatedContent 
+                    ? item.translatedContent 
+                    : (item.content || '[Sin texto]')
+                  }
+                </Text>
                 
-                {item.isLoadingTranslation && (
-                  <Text style={styles.loadingTranslation}>Traduciendo...</Text>
-                )}
-                
-                {item.translatedContent && (
-                  <Text style={styles.translatedText}>
-                    {item.translatedContent}
-                  </Text>
-                )}
-              </View>
-            )}
-
-            {/* Sección de traducción de audio */}
-            {!item.temp && isAudioMessage && (
-              <View style={styles.translationSection}>
-                {!item.translatedAudioUrl && !item.isLoadingAudioTranslation && (
-                  <TouchableOpacity 
-                    onPress={() => getAudioTranslation(item.id)}
-                    style={styles.translateButton}
-                  >
-                    <Text style={styles.translateText}>Traducir Audio</Text>
-                  </TouchableOpacity>
-                )}
-                
-                {item.isLoadingAudioTranslation && (
-                  <Text style={styles.loadingTranslation}>Traduciendo audio...</Text>
-                )}
-                
-                {item.translatedAudioUrl && (
-                  <View style={styles.translatedAudioContainer}>
-                    <View style={styles.translatedAudioHeader}>
-                      <Image 
-                        source={require('../img/icons/audio_icon.png')} 
-                        style={{ width: 20, height: 20, marginRight: 6 }}
-                      />
-                      <Text style={styles.translatedAudioLabel}>Audio traducido:</Text>
-                    </View>
-                    <TouchableOpacity 
-                      style={styles.translatedPlayButton}
-                      onPress={() => playTranslatedAudio(item.id, item.translatedAudioUrl!)}
+                {/* Switch de traducción para texto */}
+                {!item.temp && (
+                  <View style={styles.textSwitchContainer}>
+                    <Text style={styles.switchLabel}>Original</Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.textSwitch,
+                        textSwitchStates[item.id] && styles.textSwitchActive
+                      ]}
+                      onPress={() => toggleTextSwitch(item.id)}
+                      disabled={item.isLoadingTranslation}
                     >
-                      {playingAudio[`translated_${item.id}`] ? (
-                        <Text style={styles.playButtonText}>⏸️ Pausar</Text>
-                      ) : (
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <Image 
-                            source={require('../img/icons/play_icon.png')} 
-                            style={{width: 20, height: 20, marginRight: 6}}
-                          />
-                          <Text style={styles.playButtonText}>Reproducir</Text>
-                        </View>
-                      )}
+                      <View style={[
+                        styles.textSwitchThumb,
+                        textSwitchStates[item.id] && styles.textSwitchThumbActive
+                      ]} />
                     </TouchableOpacity>
+                    <Text style={styles.switchLabel}>Traducido</Text>
+                    {item.isLoadingTranslation && (
+                      <Text style={styles.loadingTranslation}>Cargando...</Text>
+                    )}
                   </View>
                 )}
               </View>
             )}
-            
+
             {item.temp && (
               <Text style={styles.sendingIndicator}>Enviando...</Text>
             )}
           </View>
-          <Text style={styles.time}>
+          <Text style={[styles.time, isMe ? styles.timeMe : styles.timeOther]}>
             {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
         </View>
@@ -1269,11 +1319,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     maxWidth: '100%',
   },
+  messageColumn: {
+    flexDirection: 'column',
+    maxWidth: '100%',
+  },
   meRow: {
     justifyContent: 'flex-end',
   },
+  meColumn: {
+    alignItems: 'flex-end',
+  },
   otherRow: {
     justifyContent: 'flex-start',
+  },
+  otherColumn: {
+    alignItems: 'flex-start',
   },
   bubble: {
     maxWidth: '75%',
@@ -1291,6 +1351,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#66a6ff',
     borderTopLeftRadius: 4,
     alignSelf: 'flex-start',
+  },
+  translatedBubble: {
+    backgroundColor: '#8e44ad',
   },
   tempMessage: {
     opacity: 0.7,
@@ -1317,9 +1380,14 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 11,
     color: '#aaa',
-    marginLeft: 2,
-    marginRight: 2,
+    marginTop: 4,
     alignSelf: 'flex-end',
+  },
+  timeMe: {
+    alignSelf: 'flex-end',
+  },
+  timeOther: {
+    alignSelf: 'flex-start',
   },
   typingIndicator: {
     flexDirection: 'row',
@@ -1437,10 +1505,87 @@ const styles = StyleSheet.create({
   audioBubble: {
     minWidth: 150,
   },
+  textMessageContainer: {
+    flexDirection: 'column',
+    width: '100%',
+  },
+  textSwitchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  textSwitch: {
+    width: 40,
+    height: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 10,
+    padding: 2,
+    justifyContent: 'center',
+    marginHorizontal: 8,
+  },
+  textSwitchActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  textSwitchThumb: {
+    width: 16,
+    height: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  textSwitchThumbActive: {
+    alignSelf: 'flex-end',
+  },
   audioMessageContainer: {
+    flexDirection: 'column',
+    width: '100%',
+  },
+  audioMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  audioSwitchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  switchLabel: {
+    color: '#E8F4FD',
+    fontSize: 11,
+    marginHorizontal: 8,
+    opacity: 0.8,
+  },
+  audioSwitch: {
+    width: 40,
+    height: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 10,
+    padding: 2,
+    justifyContent: 'center',
+    marginHorizontal: 8,
+  },
+  audioSwitchActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  audioSwitchThumb: {
+    width: 16,
+    height: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  audioSwitchThumbActive: {
+    alignSelf: 'flex-end',
   },
   audioIcon: {
     fontSize: 20,
@@ -1452,6 +1597,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 4,
     marginLeft: 8,
+  },
+  playButtonTranslated: {
+    backgroundColor: '#8e44ad',
   },
   playButtonText: {
     color: '#fff',
