@@ -83,6 +83,21 @@ export const UserService = {
     const response = await api.get('/users/profile');
     return response.data;
   },
+  
+  getMe: async () => {
+    console.log('🔍 UserService.getMe: Obteniendo datos del usuario...');
+    console.log('🔍 URL completa:', `${BASE_URL_USER}/users/users/me`);
+    try {
+      const response = await userAPI.get('/users/users/me');
+      console.log('✅ UserService.getMe: Datos obtenidos exitosamente:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ UserService.getMe falló:', error.message);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+      throw error;
+    }
+  },
 };
 
 // User API with authentication

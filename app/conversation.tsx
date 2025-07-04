@@ -1,12 +1,12 @@
 import AddParticipantModal from '@/components/AddParticipantModal';
 import MessageAudioModal from '@/components/MessageAudioModal';
+import { BASE_URL, getWebSocketURL } from '@/config/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { createAuthenticatedAPI } from '@/services/api';
-import { BASE_URL, getWebSocketURL } from '@/config/api';
 import { Audio } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View, StatusBar } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Actualiza la interfaz Message para incluir sender
@@ -1147,10 +1147,6 @@ export default function ConversationScreen() {
                   </View>
                 )}
               </View>
-            )}
-
-            {item.temp && (
-              <Text style={styles.sendingIndicator}>Enviando...</Text>
             )}
           </View>
           <Text style={[styles.time, isMe ? styles.timeMe : styles.timeOther]}>

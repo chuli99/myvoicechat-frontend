@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
-import { AuthService, setAuthToken } from '@/services/api';
+import { AuthService, UserService, setAuthToken } from '@/services/api';
 
 // Define the auth state interface
 interface AuthState {
@@ -10,6 +10,9 @@ interface AuthState {
   isLoading: boolean;
   userId: number | null;
   username: string | null;
+  email: string | null;
+  primaryLanguage: string | null;
+  createdAt: string | null;
 }
 
 // Define the auth context interface
@@ -20,6 +23,7 @@ interface AuthContextType {
   logout: () => void;
   error: string | null;
   clearError: () => void;
+  fetchUserData: () => Promise<void>;
 }
 
 // Create the context
@@ -32,8 +36,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isLoading: true,
     userId: null,
     username: null,
+    email: null,
+    primaryLanguage: null,
+    createdAt: null,
   });
   const [error, setError] = useState<string | null>(null);
+
+  const fetchUserData = useCallback(async () => {
+    console.log('📋 AuthContext.fetchUserData: Iniciando carga de datos del usuario...');
+    console.log('📋 Token actual:', authState.token ? 'Token presente' : 'Sin token');
+    
+    try {
+      if (authState.token) {
+        console.log('📋 AuthContext.fetchUserData: Llamando a UserService.getMe...');
+        const userData = await UserService.getMe();
+        console.log('📋 AuthContext.fetchUserData: Datos recibidos:', userData);
+        
+        setAuthState(prevState => ({
+          ...prevState,
+          email: userData.email,
+          primaryLanguage: userData.primary_language,
+          createdAt: userData.created_at,
+        }));
+        
+        console.log('✅ AuthContext.fetchUserData: Estado actualizado exitosamente');
+      } else {
+        console.log('⚠️ AuthContext.fetchUserData: No hay token, saltando carga de datos');
+      }
+    } catch (error) {
+      console.error('❌ AuthContext.fetchUserData: Error al cargar datos del usuario:', error);
+    }
+  }, [authState.token]);
 
   // Check if user is logged in on app start
   useEffect(() => {
@@ -52,13 +85,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isLoading: false,
             userId: parseInt(userId),
             username,
+            email: null,
+            primaryLanguage: null,
+            createdAt: null,
           });
+          
+          // Fetch additional user data
+          fetchUserData();
         } else {
           setAuthState({
             token: null,
             isLoading: false,
             userId: null,
             username: null,
+            email: null,
+            primaryLanguage: null,
+            createdAt: null,
           });
         }
       } catch (e) {
@@ -68,6 +110,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isLoading: false,
           userId: null,
           username: null,
+          email: null,
+          primaryLanguage: null,
+          createdAt: null,
         });
       }
     };
@@ -100,11 +145,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading: false,
         userId: user_id,
         username: user_username,
+        email: null,
+        primaryLanguage: null,
+        createdAt: null,
       });
 
       console.log('✅ AuthContext: Login completado exitosamente, navegando...');
       // Navigate to home screen
       router.replace('/(tabs)');
+      
+      // Fetch additional user data after successful login
+      fetchUserData();
     } catch (e: any) {
       console.error('❌ AuthContext: Login falló:', e);
       console.error('❌ Error completo:', e.response?.data || e.message);
@@ -145,6 +196,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isLoading: false,
       userId: null,
       username: null,
+      email: null,
+      primaryLanguage: null,
+      createdAt: null,
     });
     
     // NO hacer navegación automática - dejar que el componente la controle
@@ -156,7 +210,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ authState, login, register, logout, error, clearError }}>
+    <AuthContext.Provider value={{ authState, login, register, logout, error, clearError, fetchUserData }}>
       {children}
     </AuthContext.Provider>
   );
